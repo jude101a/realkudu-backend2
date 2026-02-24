@@ -7,6 +7,7 @@ import {
   setLawyerStatus,
   getUserByEmail,
   getUserFullname,
+  getUserBasicInfoById,
   verifyEmail,
 } from "../controllers/user.controller.js";
 
@@ -50,5 +51,37 @@ router.put(
 /* -------------------------------------------------------------------------- */
 router.get("/email/:email", protect, getUserByEmail);
 router.get("/fullname/:email", protect, getUserFullname);
+
+/**
+ * @swagger
+ * /api/users/{id}/basic:
+ *   get:
+ *     summary: Get basic user info by ID
+ *     description: Retrieve basic user profile information without password or token data.
+ *     tags:
+ *       - Users
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Basic user info retrieved
+ *       400:
+ *         description: Invalid user ID format
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/:id/basic", protect, getUserBasicInfoById);
+router.get("/get/:id/basic", protect, getUserBasicInfoById);
 
 export default router;

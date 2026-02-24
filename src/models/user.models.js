@@ -274,53 +274,31 @@ export const getUserBasicInfoByIdModel = async (id) => {
     `
     SELECT
       id,
-      first_name,
-      last_name,
+      first_name AS "firstName",
+      last_name AS "lastName",
       email,
-      phone_number,
+      phone_number AS "phoneNumber",
       address,
-      profile_image_url,
+      profile_image_url AS "profileImageUrl",
       occupation,
-      position_at_work,
-      place_of_work,
-      local_government_area,
+      position_at_work AS "positionAtWork",
+      place_of_work AS "placeOfWork",
+      local_government_area AS "localGovernmentArea",
       state,
       country,
-      marital_status,
-      number_of_children,
+      marital_status AS "maritalStatus",
+      number_of_children AS "numberOfChildren",
       hobbies,
-      is_lawyer,
-      is_verified,
-      is_upgraded
+      is_lawyer AS "isLawyer",
+      is_verified AS "isVerified",
+      is_upgraded AS "isUpgraded"
     FROM ${TABLE}
     WHERE id=$1
+    LIMIT 1
     `,
     [id]
   );
 
   if (!rows.length) return null;
-
-  const u = rows[0];
-
-  return {
-    id: u.id,
-    firstName: u.first_name,
-    lastName: u.last_name,
-    email: u.email,
-    phoneNumber: u.phone_number,
-    address: u.address,
-    profileImageUrl: u.profile_image_url,
-    occupation: u.occupation,
-    positionAtWork: u.position_at_work,
-    placeOfWork: u.place_of_work,
-    localGovernmentArea: u.local_government_area,
-    state: u.state,
-    country: u.country,
-    maritalStatus: u.marital_status,
-    numberOfChildren: u.number_of_children,
-    hobbies: u.hobbies,
-    isLawyer: u.is_lawyer,
-    isVerified: u.is_verified,
-    isUpgraded: u.is_upgraded,
-  };
+  return rows[0];
 };

@@ -4,6 +4,7 @@ import {
   createUser,
   findUserByEmail,
   findUserById,
+  getUserBasicInfoByIdModel,
   getUserFullnameByEmail,
   updatePassword as updatePasswordModel,
   updateUser as updateUserModel,
@@ -14,8 +15,11 @@ import { sendVerificationEmail } from "../utils/email.js";
 
 const SALT_ROUNDS = 12;
 const JWT_EXPIRES_IN = "7d";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+const isUuid = (value) => UUID_RE.test(String(value || ""));
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -268,6 +272,31 @@ export const getUserFullname = async (req, res, next) => {
     }
 
     return sendSuccess(res, 200, { fullname });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const getUserBasicInfoById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!isUuid(id)) {
+      return sendError(res, 400, "id must be a valid UUID");
+    }
+
+    const isOwner = req.user?.id === id;
+    const isAdmin = req.user?.role === "admin";
+    if (!isOwner && !isAdmin) {
+      return sendError(res, 403, "Forbidden");
+    }
+
+    const user = await getUserBasicInfoByIdModel(id);
+    if (!user) {
+      return sendError(res, 404, "User not found");
+    }
+
+    return sendSuccess(res, 200, { user });
   } catch (err) {
     return next(err);
   }
