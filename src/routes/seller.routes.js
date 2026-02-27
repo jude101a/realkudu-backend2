@@ -66,6 +66,7 @@ router.get("/search", validate({ query: sellerSearchQuerySchema }), searchSeller
 router.get("/verified", getVerifiedSellers);
 router.get("/top-rated", getTopRatedSellers);
 router.get("/:id", validate({ params: sellerIdParamSchema }), getSeller);
+router.get("/login/:id", loginSeller);
 
 // Protected user routes
 protectedRouter.use(protect);
