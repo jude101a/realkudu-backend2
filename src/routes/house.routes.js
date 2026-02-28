@@ -10,7 +10,7 @@ import {
   updateHouseCaretaker,
   updateHouse,
   deleteHouse
-} from "../controllers/house.controller";
+} from "../controllers/house.controller.js";
 
 const router = express.Router();
 
