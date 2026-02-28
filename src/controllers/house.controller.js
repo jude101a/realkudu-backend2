@@ -139,12 +139,17 @@ export const getHousesByEstate = async (req, res) => {
  */
 export const getStandaloneHouses = async (req, res) => {
   try {
-    const houses = await HouseModel.findStandaloneBySeller(
+    const result = await HouseModel.findStandaloneBySeller(
       req.params.sellerId
     );
-    res.json(houses.rows);
+
+    // ALWAYS return array
+    res.status(200).json(result.rows ?? []);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({
+      error: 'Failed to fetch houses',
+    });
   }
 };
 
