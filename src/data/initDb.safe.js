@@ -170,6 +170,8 @@ async function createPropertyTables(client) {
       type VARCHAR(100),
       address TEXT,
       cover_image_url TEXT,
+      state VARCHAR(100),
+      lga VARCHAR(100),
       is_single_house BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

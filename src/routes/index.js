@@ -7,6 +7,7 @@ import estateRoutes from "./estate.routes.js";
 import apartmentRoutes from "./apartment.routes.js";
 import devSeedRoutes from "./dev.seed.routes.js";
 import houseForSaleRoutes from "./house.for.sale.routes.js";
+import houseRoutes from "./house.routes.js";
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.use("/estates", estateRoutes);
 router.use("/apartments", apartmentRoutes);
 router.use("/houses-for-sale", houseForSaleRoutes);
 router.use("/dev", devSeedRoutes);
+router.use("/houses", houseRoutes);
 
 
 export default router;
