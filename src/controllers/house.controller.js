@@ -139,16 +139,29 @@ export const getHousesByEstate = async (req, res) => {
  */
 export const getStandaloneHouses = async (req, res) => {
   try {
+    const { sellerId, isSingleHouse } = req.query;
+
+    if (!sellerId) {
+      return res.status(400).json({
+        error: "sellerId is required",
+      });
+    }
+
+    const standalone =
+      isSingleHouse === undefined
+        ? true
+        : isSingleHouse === "true" || isSingleHouse === true;
+
     const result = await HouseModel.findStandaloneBySeller(
-      req.body
+      sellerId,
+      standalone
     );
 
-    // ALWAYS return array
     res.status(200).json(result.rows ?? []);
   } catch (error) {
-    console.error(error);
+    console.error("Get standalone houses failed:", error);
     res.status(500).json({
-      error: 'Failed to fetch houses',
+      error: "Failed to fetch houses",
     });
   }
 };

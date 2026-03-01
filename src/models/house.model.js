@@ -57,15 +57,16 @@ class HouseModel {
     );
   }
 
-  static async findStandaloneBySeller(sellerId,isSingleHouse = true) {
-    return pool.query(
-      `SELECT * FROM houses
-       WHERE seller_id = $1
+  static async findStandaloneBySeller(sellerId, isSingleHouse = true) {
+  return pool.query(
+    `SELECT *
+     FROM houses
+     WHERE seller_id = $1
        AND is_single_house = $2
        AND deleted_at IS NULL`,
-      [sellerId, isSingleHouse]
-    );
-  }
+    [sellerId, isSingleHouse]
+  );
+}
 
   static async updateCoverImage(id, coverImageUrl) {
     return pool.query(
