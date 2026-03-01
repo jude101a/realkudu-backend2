@@ -19,7 +19,7 @@ router.post("/createHouse", createHouse);
 router.get("/", getAllHouses);
 router.get("/:id", getHouse);
 router.get("/estate/:estateId", getHousesByEstate);
-router.get("/:sellerId/standalone", getStandaloneHouses);
+router.get("/standalone", getStandaloneHouses);
 
 router.put("/:id/cover", updateHouseCover);
 router.put("/:id/lawyer", updateHouseLawyer);

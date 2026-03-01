@@ -140,7 +140,7 @@ export const getHousesByEstate = async (req, res) => {
 export const getStandaloneHouses = async (req, res) => {
   try {
     const result = await HouseModel.findStandaloneBySeller(
-      req.params.sellerId
+      req.body
     );
 
     // ALWAYS return array

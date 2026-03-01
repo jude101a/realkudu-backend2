@@ -57,13 +57,13 @@ class HouseModel {
     );
   }
 
-  static async findStandaloneBySeller(sellerId) {
+  static async findStandaloneBySeller(sellerId,isSingleHouse = true) {
     return pool.query(
       `SELECT * FROM houses
        WHERE seller_id = $1
-       AND is_single_house = TRUE
+       AND is_single_house = $2
        AND deleted_at IS NULL`,
-      [sellerId]
+      [sellerId, isSingleHouse]
     );
   }
 
