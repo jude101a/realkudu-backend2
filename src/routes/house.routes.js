@@ -17,9 +17,9 @@ const router = express.Router();
 router.post("/createHouse", createHouse);
 
 router.get("/", getAllHouses);
-router.get("/:id", getHouse);
-router.get("/estate/:estateId", getHousesByEstate);
 router.get("/standalone", getStandaloneHouses);
+router.get("/estate/:estateId", getHousesByEstate);
+router.get("/:id", getHouse);
 
 router.put("/:id/cover", updateHouseCover);
 router.put("/:id/lawyer", updateHouseLawyer);
