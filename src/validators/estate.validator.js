@@ -17,6 +17,16 @@ export const paginationQuerySchema = Joi.object({
   sortOrder: Joi.string().valid("asc", "desc").default("desc"),
 });
 
+export const sellerEstateQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  sortBy: Joi.string().valid("id", "name", "created_at", "updated_at", "state").default("created_at"),
+  sortOrder: Joi.string().valid("asc", "desc").default("desc"),
+  state: Joi.string().trim().max(100),
+  lga: Joi.string().trim().max(100),
+  q: Joi.string().trim().min(2).max(200),
+});
+
 export const createEstateSchema = Joi.object({
   sellerId: uuid.required(),
   name: Joi.string().trim().min(2).max(255).required(),

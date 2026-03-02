@@ -1,31 +1,71 @@
-import express from "express";
+import { Router } from "express";
 import {
   createHouse,
-  getHouse,
+  deleteHouse,
   getAllHouses,
+  getHouse,
   getHousesByEstate,
+  getHousesBySeller,
   getStandaloneHouses,
+  updateHouse,
+  updateHouseCaretaker,
   updateHouseCover,
   updateHouseLawyer,
-  updateHouseCaretaker,
-  updateHouse,
-  deleteHouse
 } from "../controllers/house.controller.js";
+import { protect } from "../middlewares/auth.middleware.js";
+import { requireRole } from "../middlewares/role.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import {
+  createHouseSchema,
+  estateIdParamSchema,
+  houseIdParamSchema,
+  houseListQuerySchema,
+  sellerIdParamSchema,
+  standaloneQuerySchema,
+  updateHouseCaretakerSchema,
+  updateHouseCoverSchema,
+  updateHouseLawyerSchema,
+  updateHouseSchema,
+} from "../validators/house.validator.js";
 
-const router = express.Router();
+const router = Router();
+const protectedRouter = Router();
+const adminRouter = Router();
+const adminOnly = [protect, requireRole("admin")];
 
-router.post("/createHouse", createHouse);
+/* Public read routes */
+router.get("/getAllHouses", validate({ query: houseListQuerySchema }), getAllHouses);
+router.get("/standalone", validate({ query: standaloneQuerySchema }), getStandaloneHouses);
+router.get("/seller/:sellerId", validate({ params: sellerIdParamSchema, query: houseListQuerySchema }), getHousesBySeller);
+router.get("/estate/:estateId", validate({ params: estateIdParamSchema, query: houseListQuerySchema }), getHousesByEstate);
+router.get("/:id", validate({ params: houseIdParamSchema }), getHouse);
 
-router.get("/", getAllHouses);
-router.get("/standalone", getStandaloneHouses);
-router.get("/estate/:estateId", getHousesByEstate);
-router.get("/:id", getHouse);
+/* Protected write routes */
+protectedRouter.use(protect);
+protectedRouter.post("/", validate({ body: createHouseSchema }), createHouse);
+/* Legacy compatibility */
+protectedRouter.post("/createHouse", validate({ body: createHouseSchema }), createHouse);
+protectedRouter.put(
+  "/:id/coverImage",
+  validate({ params: houseIdParamSchema, body: updateHouseCoverSchema }),
+  updateHouseCover
+);
+protectedRouter.put(
+  "/:id/updateHouseLawyer",
+  validate({ params: houseIdParamSchema, body: updateHouseLawyerSchema }),
+  updateHouseLawyer
+);
+protectedRouter.put(
+  "/:id/updateHouseCaretaker",
+  validate({ params: houseIdParamSchema, body: updateHouseCaretakerSchema }),
+  updateHouseCaretaker
+);
+protectedRouter.put("/updateHouse/:id", validate({ params: houseIdParamSchema, body: updateHouseSchema }), updateHouse);
 
-router.put("/:id/cover", updateHouseCover);
-router.put("/:id/lawyer", updateHouseLawyer);
-router.put("/:id/caretaker", updateHouseCaretaker);
-router.put("/:id", updateHouse);
+/* Admin destructive route */
+adminRouter.delete("/deleteHouse/:id", validate({ params: houseIdParamSchema }), deleteHouse);
 
-router.delete("/:id", deleteHouse);
+router.use(protectedRouter);
+router.use(adminOnly, adminRouter);
 
 export default router;

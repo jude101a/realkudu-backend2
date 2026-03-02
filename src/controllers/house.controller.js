@@ -22,12 +22,27 @@ import HouseModel from "../models/house.model.js";
  */
 export const createHouse = async (req, res) => {
   try {
-    const house = await HouseModel.create(req.body);
-    res.status(201).json(house.rows[0]);
+    const payload = {
+      estateId: req.body.estateId ?? null,
+      sellerId: req.body.sellerId,
+      lawyerId: req.body.lawyerId || null,
+      caretakerId: req.body.caretakerId || null,
+      name: req.body.name,
+      type: req.body.type,
+      address: req.body.address,
+      coverImageUrl: req.body.coverImageUrl ?? null,
+      isSingleHouse: req.body.isSingleHouse === true,
+      state: req.body.state,
+      lga: req.body.lga,
+    };
+
+    const result = await HouseModel.create(payload);
+    res.status(201).json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 /**
  * @swagger

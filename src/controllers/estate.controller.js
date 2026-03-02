@@ -1,8 +1,5 @@
 import EstateModel from "../models/estate.model.js";
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 const ok = (res, data, message = "Success", meta = undefined, status = 200) =>
   res.status(status).json({
     success: true,
@@ -21,16 +18,27 @@ const wrap = (handler) => async (req, res) => {
   try {
     await handler(req, res);
   } catch (error) {
+    if (error?.code === "23503") {
+      return fail(res, 400, "Invalid related resource reference", "FK_CONSTRAINT");
+    }
+    if (error?.code === "22P02") {
+      return fail(res, 400, "Invalid identifier format", "VALIDATION_ERROR");
+    }
+
     console.error("[estate.controller] unhandled error", {
       message: error?.message,
       code: error?.code,
-      stack: error?.stack,
+      detail: error?.detail,
     });
-    return fail(res, 500, "Internal server error", "INTERNAL_ERROR");
+
+    const details =
+      process.env.NODE_ENV !== "production"
+        ? { message: error?.message, code: error?.code, detail: error?.detail }
+        : undefined;
+
+    return fail(res, 500, "Internal server error", "INTERNAL_ERROR", details);
   }
 };
-
-const isUuid = (value) => UUID_RE.test(String(value || ""));
 
 const parsePagination = (query) => ({
   page: Math.max(Number.parseInt(query.page, 10) || 1, 1),
@@ -39,92 +47,77 @@ const parsePagination = (query) => ({
   sortOrder: query.sortOrder || "desc",
 });
 
-export const createEstate = wrap(async (req, res) => {
-  const { sellerId, name, address } = req.body || {};
-  if (!sellerId || !name || !address) {
-    return fail(res, 400, "sellerId, name and address are required", "VALIDATION_ERROR");
-  }
-  if (!isUuid(sellerId)) {
-    return fail(res, 400, "sellerId must be a valid UUID", "VALIDATION_ERROR");
-  }
+const listMeta = (result) => ({
+  total: result.total,
+  page: result.page,
+  limit: result.limit,
+  totalPages: result.totalPages,
+});
 
-  const estate = await EstateModel.create(req.body);
+export const createEstate = wrap(async (req, res) => {
+  const estate = await EstateModel.create(req.body || {});
   return ok(res, estate, "Estate created successfully", undefined, 201);
 });
 
 export const getEstate = wrap(async (req, res) => {
-  const { id } = req.params;
-  if (!isUuid(id)) return fail(res, 400, "id must be a valid UUID", "VALIDATION_ERROR");
-
-  const estate = await EstateModel.findById(id);
+  const estate = await EstateModel.findById(req.params.id);
   if (!estate) return fail(res, 404, "Estate not found", "NOT_FOUND");
   return ok(res, estate, "Estate retrieved successfully");
 });
 
 export const getAllEstatesBySeller = wrap(async (req, res) => {
-  const { sellerId } = req.params;
-  if (!isUuid(sellerId)) return fail(res, 400, "sellerId must be a valid UUID", "VALIDATION_ERROR");
-
-  const result = await EstateModel.findAllBySeller(sellerId, parsePagination(req.query));
-  return ok(res, result.rows, "Estates retrieved successfully", {
-    total: result.total,
-    page: result.page,
-    limit: result.limit,
-    totalPages: result.totalPages,
+  const result = await EstateModel.findAllBySeller(req.params.sellerId, {
+    ...parsePagination(req.query),
+    filters: {
+      state: req.query.state,
+      lga: req.query.lga,
+      q: req.query.q,
+    },
   });
+
+  return ok(res, result.rows, "Estates retrieved successfully", listMeta(result));
 });
 
 export const getResidentialEstates = wrap(async (req, res) => {
-  const { sellerId } = req.params;
-  if (!isUuid(sellerId)) return fail(res, 400, "sellerId must be a valid UUID", "VALIDATION_ERROR");
-
-  const result = await EstateModel.findResidentialBySeller(sellerId, parsePagination(req.query));
-  return ok(res, result.rows, "Residential estates retrieved successfully", {
-    total: result.total,
-    page: result.page,
-    limit: result.limit,
-    totalPages: result.totalPages,
+  const result = await EstateModel.findResidentialBySeller(req.params.sellerId, {
+    ...parsePagination(req.query),
+    filters: {
+      state: req.query.state,
+      lga: req.query.lga,
+      q: req.query.q,
+    },
   });
+
+  return ok(res, result.rows, "Residential estates retrieved successfully", listMeta(result));
 });
 
 export const getLandEstates = wrap(async (req, res) => {
-  const { sellerId } = req.params;
-  if (!isUuid(sellerId)) return fail(res, 400, "sellerId must be a valid UUID", "VALIDATION_ERROR");
-
-  const result = await EstateModel.findLandEstatesBySeller(sellerId, parsePagination(req.query));
-  return ok(res, result.rows, "Land estates retrieved successfully", {
-    total: result.total,
-    page: result.page,
-    limit: result.limit,
-    totalPages: result.totalPages,
+  const result = await EstateModel.findLandEstatesBySeller(req.params.sellerId, {
+    ...parsePagination(req.query),
+    filters: {
+      state: req.query.state,
+      lga: req.query.lga,
+      q: req.query.q,
+    },
   });
+
+  return ok(res, result.rows, "Land estates retrieved successfully", listMeta(result));
 });
 
 export const updateEstateCoverImage = wrap(async (req, res) => {
-  const { id } = req.params;
-  const { coverImageUrl } = req.body || {};
-  if (!isUuid(id)) return fail(res, 400, "id must be a valid UUID", "VALIDATION_ERROR");
-  if (!coverImageUrl) return fail(res, 400, "coverImageUrl is required", "VALIDATION_ERROR");
-
-  const estate = await EstateModel.updateCoverImage(id, coverImageUrl);
+  const estate = await EstateModel.updateCoverImage(req.params.id, req.body.coverImageUrl);
   if (!estate) return fail(res, 404, "Estate not found", "NOT_FOUND");
   return ok(res, estate, "Estate cover image updated successfully");
 });
 
 export const updateEstateDetails = wrap(async (req, res) => {
-  const { id } = req.params;
-  if (!isUuid(id)) return fail(res, 400, "id must be a valid UUID", "VALIDATION_ERROR");
-
-  const estate = await EstateModel.updateDetails(id, req.body || {});
+  const estate = await EstateModel.updateDetails(req.params.id, req.body || {});
   if (!estate) return fail(res, 404, "Estate not found", "NOT_FOUND");
   return ok(res, estate, "Estate details updated successfully");
 });
 
 export const deleteEstate = wrap(async (req, res) => {
-  const { id } = req.params;
-  if (!isUuid(id)) return fail(res, 400, "id must be a valid UUID", "VALIDATION_ERROR");
-
-  const deleted = await EstateModel.softDelete(id);
+  const deleted = await EstateModel.softDelete(req.params.id);
   if (!deleted) return fail(res, 404, "Estate not found", "NOT_FOUND");
-  return ok(res, { id }, "Estate deleted successfully");
+  return ok(res, { id: deleted.id }, "Estate deleted successfully");
 });
