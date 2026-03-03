@@ -23,6 +23,11 @@ export const sellerIdParamSchema = Joi.object({
   sellerId: uuid.required(),
 });
 
+export const sellerEstateParamSchema = Joi.object({
+  sellerId: uuid.required(),
+  estateId: uuid.required(),
+});
+
 export const houseListQuerySchema = Joi.object({
   ...basePagination,
   sellerId: uuid,
@@ -36,7 +41,6 @@ export const houseListQuerySchema = Joi.object({
 
 export const standaloneQuerySchema = Joi.object({
   ...basePagination,
-  sellerId: uuid.required(),
   isSingleHouse: Joi.boolean().default(true),
 });
 

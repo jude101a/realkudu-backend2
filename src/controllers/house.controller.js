@@ -1,5 +1,27 @@
 import HouseModel from "../models/house.model.js";
 
+const parseListOptions = (query = {}) => {
+  const page = Number.parseInt(query.page, 10);
+  const limit = Number.parseInt(query.limit, 10);
+  const hasIsSingleHouse = query.isSingleHouse !== undefined;
+  const isSingleHouse =
+    query.isSingleHouse === true || String(query.isSingleHouse).toLowerCase() === "true";
+
+  return {
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+    sortBy: query.sortBy || "created_at",
+    sortOrder: query.sortOrder || "desc",
+    filters: {
+      state: query.state,
+      lga: query.lga,
+      type: query.type,
+      q: query.q,
+      ...(hasIsSingleHouse ? { isSingleHouse } : {}),
+    },
+  };
+};
+
 /**
  * @swagger
  * /api/houses:
@@ -70,11 +92,11 @@ export const getHouse = async (req, res) => {
   try {
     const house = await HouseModel.findById(req.params.id);
 
-    if (!house.rowCount) {
+    if (!house) {
       return res.status(404).json({ message: "House not found" });
     }
 
-    res.json(house.rows[0]);
+    res.json(house);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -96,8 +118,8 @@ export const getHouse = async (req, res) => {
  */
 export const getAllHouses = async (req, res) => {
   try {
-    const houses = await HouseModel.findAll();
-    res.json(houses.rows);
+    const houses = await HouseModel.findAll(parseListOptions(req.query));
+    res.json(houses.rows ?? []);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -125,8 +147,30 @@ export const getAllHouses = async (req, res) => {
  */
 export const getHousesByEstate = async (req, res) => {
   try {
-    const houses = await HouseModel.findByEstate(req.params.estateId);
+    const houses = await HouseModel.findByEstate(req.params.estateId, parseListOptions(req.query));
     res.json(houses.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getHousesBySeller = async (req, res) => {
+  try {
+    const houses = await HouseModel.findBySeller(req.params.sellerId, parseListOptions(req.query));
+    res.json(houses.rows ?? []);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getEstateHousesBySeller = async (req, res) => {
+  try {
+    const houses = await HouseModel.getEstateHousesBySeller(
+      req.params.sellerId,
+      req.params.estateId,
+      parseListOptions(req.query)
+    );
+    res.json(houses.rows ?? []);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -154,7 +198,11 @@ export const getHousesByEstate = async (req, res) => {
  */
 export const getStandaloneHouses = async (req, res) => {
   try {
-    const { sellerId } = req.query;
+    const sellerId = req.params.sellerId || req.query.sellerId;
+    const isSingleHouse =
+      req.query.isSingleHouse === undefined
+        ? true
+        : req.query.isSingleHouse === true || String(req.query.isSingleHouse).toLowerCase() === "true";
 
     if (!sellerId) {
       return res.status(400).json({
@@ -163,7 +211,9 @@ export const getStandaloneHouses = async (req, res) => {
     }
 
     const result = await HouseModel.findStandaloneBySeller(
-      sellerId
+      sellerId,
+      isSingleHouse,
+      parseListOptions(req.query)
     );
 
     res.status(200).json(result.rows ?? []);
