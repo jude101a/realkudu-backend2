@@ -35,8 +35,8 @@ const adminOnly = [protect, requireRole("admin")];
 
 /* Public read routes */
 router.get("/getAllHouses", validate({ query: houseListQuerySchema }), getAllHouses);
-router.get("/standalone", validate({ query: standaloneQuerySchema }), getStandaloneHouses);
-router.get("/seller/:sellerId", validate({ params: sellerIdParamSchema, query: houseListQuerySchema }), getHousesBySeller);
+router.get("/standalone/:sellerId", validate({ params: sellerIdParamSchema, query: standaloneQuerySchema }), getStandaloneHouses);
+router.get("/estateHouses/:sellerId/:estateId", validate({ params: sellerIdParamSchema, query: houseListQuerySchema }), getEstateHousesBySeller);
 router.get("/estate/:estateId", validate({ params: estateIdParamSchema, query: houseListQuerySchema }), getHousesByEstate);
 router.get("/:id", validate({ params: houseIdParamSchema }), getHouse);
 

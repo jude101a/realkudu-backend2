@@ -152,7 +152,7 @@ async function createPropertyTables(client) {
       lga VARCHAR(100),
       state VARCHAR(100),
       cover_image_url TEXT,
-      is_land_estate BOOLEAN DEFAULT FALSE,
+      estate_type VARCHAR(15) CHECK (estate_type IN ('land', 'building', 'combination')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       deleted_at TIMESTAMPTZ

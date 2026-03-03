@@ -154,7 +154,7 @@ export const getHousesByEstate = async (req, res) => {
  */
 export const getStandaloneHouses = async (req, res) => {
   try {
-    const { sellerId, isSingleHouse } = req.query;
+    const { sellerId } = req.query;
 
     if (!sellerId) {
       return res.status(400).json({
@@ -162,14 +162,8 @@ export const getStandaloneHouses = async (req, res) => {
       });
     }
 
-    const standalone =
-      isSingleHouse === undefined
-        ? true
-        : isSingleHouse === "true" || isSingleHouse === true;
-
     const result = await HouseModel.findStandaloneBySeller(
-      sellerId,
-      standalone
+      sellerId
     );
 
     res.status(200).json(result.rows ?? []);

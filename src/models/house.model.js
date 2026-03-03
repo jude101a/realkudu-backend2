@@ -166,6 +166,13 @@ class HouseModel {
     });
   }
 
+  static async getEstateHousesBySeller(sellerId, estateId, options = {}) {
+    return this.list({
+      ...options,
+      filters: { ...(options.filters || {}), sellerId, estateId },
+    });
+  }
+
   static async updateCoverImage(id, coverImageUrl) {
     return this.updateFields(id, { coverImageUrl });
   }
