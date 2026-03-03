@@ -34,7 +34,7 @@ export const createEstateSchema = Joi.object({
   lga: Joi.string().trim().max(100).allow(null, ""),
   state: Joi.string().trim().max(100).allow(null, ""),
   coverImageUrl: Joi.string().uri().max(2048).allow(null, ""),
-  isLandEstate: Joi.boolean().default(false),
+  estateType: Joi.string().trim().max(15).allow(null, ""),
 });
 
 export const updateEstateCoverSchema = Joi.object({
