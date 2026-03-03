@@ -3,10 +3,9 @@ import {
   createHouse,
   deleteHouse,
   getAllHouses,
-  getEstateHousesBySeller,
   getHouse,
   getHousesByEstate,
-  getHousesBySeller,
+  getEstateHousesBySeller,
   getStandaloneHouses,
   updateHouse,
   updateHouseCaretaker,
@@ -21,13 +20,13 @@ import {
   estateIdParamSchema,
   houseIdParamSchema,
   houseListQuerySchema,
-  sellerEstateParamSchema,
   sellerIdParamSchema,
   standaloneQuerySchema,
   updateHouseCaretakerSchema,
   updateHouseCoverSchema,
   updateHouseLawyerSchema,
   updateHouseSchema,
+  estateHousesQuerySchema,
 } from "../validators/house.validator.js";
 
 const router = Router();
@@ -38,8 +37,7 @@ const adminOnly = [protect, requireRole("admin")];
 /* Public read routes */
 router.get("/getAllHouses", validate({ query: houseListQuerySchema }), getAllHouses);
 router.get("/standalone/:sellerId", validate({ params: sellerIdParamSchema, query: standaloneQuerySchema }), getStandaloneHouses);
-router.get("/estateHouses/:sellerId/:estateId", validate({ params: sellerEstateParamSchema, query: houseListQuerySchema }), getEstateHousesBySeller);
-router.get("/seller/:sellerId", validate({ params: sellerIdParamSchema, query: houseListQuerySchema }), getHousesBySeller);
+router.get("/estateHouses/:sellerId/:estateId", validate({ params: sellerIdParamSchema, query: estateHousesQuerySchema }), getEstateHousesBySeller);
 router.get("/estate/:estateId", validate({ params: estateIdParamSchema, query: houseListQuerySchema }), getHousesByEstate);
 router.get("/:id", validate({ params: houseIdParamSchema }), getHouse);
 

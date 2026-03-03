@@ -1,27 +1,5 @@
 import HouseModel from "../models/house.model.js";
 
-const parseListOptions = (query = {}) => {
-  const page = Number.parseInt(query.page, 10);
-  const limit = Number.parseInt(query.limit, 10);
-  const hasIsSingleHouse = query.isSingleHouse !== undefined;
-  const isSingleHouse =
-    query.isSingleHouse === true || String(query.isSingleHouse).toLowerCase() === "true";
-
-  return {
-    page: Number.isFinite(page) && page > 0 ? page : 1,
-    limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
-    sortBy: query.sortBy || "created_at",
-    sortOrder: query.sortOrder || "desc",
-    filters: {
-      state: query.state,
-      lga: query.lga,
-      type: query.type,
-      q: query.q,
-      ...(hasIsSingleHouse ? { isSingleHouse } : {}),
-    },
-  };
-};
-
 /**
  * @swagger
  * /api/houses:
@@ -92,11 +70,11 @@ export const getHouse = async (req, res) => {
   try {
     const house = await HouseModel.findById(req.params.id);
 
-    if (!house) {
+    if (!house.rowCount) {
       return res.status(404).json({ message: "House not found" });
     }
 
-    res.json(house);
+    res.json(house.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -118,8 +96,8 @@ export const getHouse = async (req, res) => {
  */
 export const getAllHouses = async (req, res) => {
   try {
-    const houses = await HouseModel.findAll(parseListOptions(req.query));
-    res.json(houses.rows ?? []);
+    const houses = await HouseModel.findAll();
+    res.json(houses.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -147,30 +125,8 @@ export const getAllHouses = async (req, res) => {
  */
 export const getHousesByEstate = async (req, res) => {
   try {
-    const houses = await HouseModel.findByEstate(req.params.estateId, parseListOptions(req.query));
+    const houses = await HouseModel.findByEstate(req.params.estateId);
     res.json(houses.rows);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-export const getHousesBySeller = async (req, res) => {
-  try {
-    const houses = await HouseModel.findBySeller(req.params.sellerId, parseListOptions(req.query));
-    res.json(houses.rows ?? []);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-export const getEstateHousesBySeller = async (req, res) => {
-  try {
-    const houses = await HouseModel.getEstateHousesBySeller(
-      req.params.sellerId,
-      req.params.estateId,
-      parseListOptions(req.query)
-    );
-    res.json(houses.rows ?? []);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -178,9 +134,9 @@ export const getEstateHousesBySeller = async (req, res) => {
 
 /**
  * @swagger
- * /api/houses/seller/{sellerId}/standalone:
+ * /api/houses/standalone/:sellerId:
  *   get:
- *     summary: Get standalone houses
+ *     summary: Get non estate single listed houses for the seller
  *     description: Get houses not part of an estate
  *     tags:
  *       - Houses
@@ -198,11 +154,7 @@ export const getEstateHousesBySeller = async (req, res) => {
  */
 export const getStandaloneHouses = async (req, res) => {
   try {
-    const sellerId = req.params.sellerId || req.query.sellerId;
-    const isSingleHouse =
-      req.query.isSingleHouse === undefined
-        ? true
-        : req.query.isSingleHouse === true || String(req.query.isSingleHouse).toLowerCase() === "true";
+    const { sellerId } = req.query;
 
     if (!sellerId) {
       return res.status(400).json({
@@ -211,9 +163,7 @@ export const getStandaloneHouses = async (req, res) => {
     }
 
     const result = await HouseModel.findStandaloneBySeller(
-      sellerId,
-      isSingleHouse,
-      parseListOptions(req.query)
+      sellerId
     );
 
     res.status(200).json(result.rows ?? []);
@@ -224,6 +174,58 @@ export const getStandaloneHouses = async (req, res) => {
     });
   }
 };
+
+
+
+/**
+ * @swagger
+ * /api/houses/estateHouses/:sellerId/:estateId
+ *   get:
+ *     summary: Get estate houses
+ *     description: Get houses that are part of an estate
+ *     tags:
+ *       - Houses
+ *     parameters:
+ *       - in: path
+ *         name: sellerId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: estateId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Estate houses retrieved
+ *       500:
+ *         description: Server error
+ */
+export const getEstateHousesBySeller = async (req, res) => {
+  try {
+    const { sellerId, estateId } = req.query;
+
+    if (!sellerId || !estateId) {
+      return res.status(400).json({
+        error: "sellerId and estateId are required",
+      });
+    }
+
+    const result = await HouseModel.findEstateHousesBySeller(
+      sellerId,
+      estateId
+    );
+
+    res.status(200).json(result.rows ?? []);
+  } catch (error) {
+    console.error("Get estate houses failed:", error);
+    res.status(500).json({
+      error: "Failed to fetch houses",
+    });
+  }
+};
+
 
 /**
  * @swagger

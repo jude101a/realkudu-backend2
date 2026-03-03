@@ -28,39 +28,39 @@ const adminOnly = [protect, requireRole("admin")];
 
 /* Public read routes */
 router.get(
-  "/seller/getAllEstateBySeller/:sellerId",
+  "/getAllEstateBySeller/:sellerId",
   validate({ params: sellerIdParamSchema, query: paginationQuerySchema }),
   getAllEstatesBySeller
 );
 router.get(
-  "/seller/:sellerId/residential",
+  "/residential/:sellerId",
   validate({ params: sellerIdParamSchema, query: paginationQuerySchema }),
   getResidentialEstates
 );
 router.get(
-  "/seller/getLandedEstates:sellerId",
+  "/getLandedEstates/:sellerId",
   validate({ params: sellerIdParamSchema, query: paginationQuerySchema }),
   getLandEstates
 );
-router.get("/getEstate/:id", validate({ params: estateIdParamSchema }), getEstate);
+router.get("/getEstate/:estateId", validate({ params: estateIdParamSchema }), getEstate);
 
 /* Protected write routes */
 protectedRouter.use(protect);
 protectedRouter.post("/createEstate", validate({ body: createEstateSchema }), createEstate);
 protectedRouter.put(
-  "/:id/updateEstateCoverImage",
+  "/updateEstateCoverImage/:estateId",
   validate({ params: estateIdParamSchema, body: updateEstateCoverSchema }),
   updateEstateCoverImage
 );
 
 protectedRouter.put(
-  "/updateEstate/:id",
+  "/updateEstate/:estateId",
   validate({ params: estateIdParamSchema, body: updateEstateDetailsSchema }),
   updateEstateDetails
 );
 
 /* Admin mutation route */
-adminRouter.delete("/deleteEstate/:id", validate({ params: estateIdParamSchema }), deleteEstate);
+adminRouter.delete("/deleteEstate/:estateId", validate({ params: estateIdParamSchema }), deleteEstate);
 
 router.use(protectedRouter);
 router.use(adminOnly, adminRouter);

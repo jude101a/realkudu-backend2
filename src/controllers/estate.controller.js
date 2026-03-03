@@ -66,6 +66,7 @@ export const getEstate = wrap(async (req, res) => {
 });
 
 export const getAllEstatesBySeller = wrap(async (req, res) => {
+  
   const result = await EstateModel.findAllBySeller(req.params.sellerId, {
     ...parsePagination(req.query),
     filters: {
