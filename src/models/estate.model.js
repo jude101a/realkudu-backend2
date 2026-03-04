@@ -207,14 +207,14 @@ class EstateModel {
     return rows[0] || null;
   }
 
-  static async softDelete(id, client = null) {
+  static async softDelete(estateId, client = null) {
     const db = client || pool;
     const { rows } = await db.query(
       `UPDATE ${TABLE}
        SET deleted_at = NOW()
        WHERE id = $1 AND deleted_at IS NULL
        RETURNING id`,
-      [id]
+      [estateId]
     );
     return rows[0] || null;
   }
