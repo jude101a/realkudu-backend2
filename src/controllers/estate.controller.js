@@ -122,3 +122,36 @@ export const deleteEstate = wrap(async (req, res) => {
   if (!deleted) return fail(res, 404, "Estate not found", "NOT_FOUND");
   return ok(res, { id: deleted.id }, "Estate deleted successfully");
 });
+
+// controllers/estate.controller.js
+export const softDeleteEstate = wrap(async (req, res) => {
+  const { estateId } = req.params;
+
+  const deleted = await EstateModel.softDeleteByEstateId(estateId);
+
+  if (!deleted) {
+    return fail(res, 404, "Estate not found or already deleted", "NOT_FOUND");
+  }
+
+  return ok(
+    res,
+    deleted,
+    "Estate soft-deleted successfully",
+    undefined,
+    200
+  );
+});
+
+
+export const getDeletedEstatesBySeller = wrap(async (req, res) => {
+  const { sellerId } = req.params;
+
+  const estates = await EstateModel.findDeletedBySellerId(sellerId);
+
+  return ok(
+    res,
+    estates,
+    "Deleted estates fetched successfully",
+    { total: estates.length }
+  );
+});

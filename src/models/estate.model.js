@@ -218,6 +218,45 @@ class EstateModel {
     );
     return rows[0] || null;
   }
+
+
+
+  // models/EstateModel.js
+static async softDeleteByEstateId(estateId, client = null) {
+  const db = client || pool;
+
+  const { rows } = await db.query(
+    `
+    UPDATE estates
+    SET deleted_at = NOW()
+    WHERE id = $1
+      AND deleted_at IS NULL
+    RETURNING id, deleted_at
+    `,
+    [estateId]
+  );
+
+  return rows[0] || null;
+}
+
+
+
+static async findDeletedBySellerId(sellerId, client = null) {
+  const db = client || pool;
+
+  const { rows } = await db.query(
+    `
+    SELECT *
+    FROM estates
+    WHERE seller_id = $1
+      AND deleted_at IS NOT NULL
+    ORDER BY deleted_at DESC
+    `,
+    [sellerId]
+  );
+
+  return rows;
+}
 }
 
 export default EstateModel;

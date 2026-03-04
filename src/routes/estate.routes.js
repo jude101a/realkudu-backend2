@@ -6,8 +6,10 @@ import {
   getEstate,
   getLandEstates,
   getResidentialEstates,
+  softDeleteEstate,
   updateEstateCoverImage,
   updateEstateDetails,
+  getDeletedEstatesBySeller
 } from "../controllers/estate.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
@@ -58,9 +60,33 @@ protectedRouter.put(
   validate({ params: estateIdParamSchema, body: updateEstateDetailsSchema }),
   updateEstateDetails
 );
+protectedRouter.delete("/deleteEstate/:estateId", validate({ params: estateIdParamSchema }), softDeleteEstate);
+
 
 /* Admin mutation route */
-adminRouter.delete("/deleteEstate/:estateId", validate({ params: estateIdParamSchema }), deleteEstate);
+adminRouter.adminDelete("/adminDeleteEstate/:estateId", validate({ params: estateIdParamSchema }), deleteEstate);
+
+// routes/admin.estates.routes.js
+adminRouter.delete(
+  "/estates/:estateId",
+  adminOnly,
+  validate({ params: estateIdParamSchema }),
+  deleteEstate
+);
+
+adminRouter.get(
+  "/estates/getDeletedestatesBySellerID/:sellerId",
+  adminOnly,
+  validate({ params: sellerIdParamSchema }),
+  getDeletedEstatesBySeller
+);
+
+protectedRouter.get(
+  "/estates/deleted/:sellerId",
+  adminOnly,
+  validate({ params: sellerIdParamSchema }),
+  getDeletedEstatesBySeller
+);
 
 router.use(protectedRouter);
 router.use(adminOnly, adminRouter);
