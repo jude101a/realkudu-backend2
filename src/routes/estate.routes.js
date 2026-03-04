@@ -64,7 +64,7 @@ protectedRouter.delete("/deleteEstate/:estateId", validate({ params: estateIdPar
 
 
 /* Admin mutation route */
-adminRouter.adminDelete("/adminDeleteEstate/:estateId", validate({ params: estateIdParamSchema }), deleteEstate);
+adminRouter.delete("/adminDeleteEstate/:estateId", validate({ params: estateIdParamSchema }), deleteEstate);
 
 // routes/admin.estates.routes.js
 adminRouter.delete(
