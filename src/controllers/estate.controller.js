@@ -118,7 +118,7 @@ export const updateEstateDetails = wrap(async (req, res) => {
 });
 
 export const deleteEstate = wrap(async (req, res) => {
-  const deleted = await EstateModel.softDelete(req.params.id);
+  const deleted = await EstateModel.softDelete(req.params.estateId);
   if (!deleted) return fail(res, 404, "Estate not found", "NOT_FOUND");
   return ok(res, { id: deleted.id }, "Estate deleted successfully");
 });
