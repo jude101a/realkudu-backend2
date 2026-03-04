@@ -106,7 +106,7 @@ export const getLandEstates = wrap(async (req, res) => {
 });
 
 export const updateEstateCoverImage = wrap(async (req, res) => {
-  const estate = await EstateModel.updateCoverImage(req.params.id, req.body.coverImageUrl);
+  const estate = await EstateModel.updateCoverImage(req.params.estateId, req.body.coverImageUrl);
   if (!estate) return fail(res, 404, "Estate not found", "NOT_FOUND");
   return ok(res, estate, "Estate cover image updated successfully");
 });

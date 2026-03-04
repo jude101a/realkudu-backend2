@@ -3,7 +3,7 @@ import Joi from "joi";
 const uuid = Joi.string().guid({ version: ["uuidv4", "uuidv5"] });
 
 export const estateIdParamSchema = Joi.object({
-  id: uuid.required(),
+  estateId: uuid.required(),
 });
 
 export const sellerIdParamSchema = Joi.object({
@@ -34,7 +34,8 @@ export const createEstateSchema = Joi.object({
   lga: Joi.string().trim().max(100).allow(null, ""),
   state: Joi.string().trim().max(100).allow(null, ""),
   coverImageUrl: Joi.string().uri().max(2048).allow(null, ""),
-  estateType: Joi.string().trim().max(15).allow(null, ""),
+  estateType: Joi.string().trim().max(15).required(),
+  isLandEstate: Joi.boolean().optional(),
 });
 
 export const updateEstateCoverSchema = Joi.object({
@@ -44,8 +45,5 @@ export const updateEstateCoverSchema = Joi.object({
 export const updateEstateDetailsSchema = Joi.object({
   name: Joi.string().trim().min(2).max(255),
   address: Joi.string().trim().min(3).max(2000),
-  lga: Joi.string().trim().max(100).allow(null, ""),
-  state: Joi.string().trim().max(100).allow(null, ""),
-  coverImageUrl: Joi.string().uri().max(2048).allow(null, ""),
-  isLandEstate: Joi.boolean(),
+  estateType: Joi.string().trim().max(15),
 }).min(1);
