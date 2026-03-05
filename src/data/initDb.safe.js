@@ -160,6 +160,22 @@ async function createPropertyTables(client) {
   `);
 
   await client.query(`
+    CREATE TABLE IF NOT EXISTS images (
+  imageId UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  property_id UUID NOT NULL,
+
+  image_url TEXT NOT NULL,
+
+  is_cover BOOLEAN DEFAULT FALSE,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+  `);
+
+  await client.query(`
     CREATE TABLE IF NOT EXISTS houses (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       estate_id UUID REFERENCES estates(id) ON DELETE SET NULL,

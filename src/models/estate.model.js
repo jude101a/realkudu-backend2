@@ -57,9 +57,9 @@ const buildFilters = (filters = {}, startIndex = 1) => {
     conditions.push(`seller_id = $${idx++}`);
     values.push(filters.sellerId);
   }
-  if (filters.isLandEstate !== undefined) {
-    conditions.push(`is_land_estate = $${idx++}`);
-    values.push(filters.isLandEstate);
+  if (filters.estateType !== undefined) {
+    conditions.push(`estate_type = $${idx++}`);
+    values.push(filters.estateType);
   }
   if (filters.state) {
     conditions.push(`state = $${idx++}`);
@@ -157,14 +157,17 @@ class EstateModel {
   static async findAllBySeller(sellerId, options = {}) {
     return this.list({
       ...options,
-      filters: { ...(options.filters || {}), sellerId },
+      filters: { ...(options.filters || {}),
+       sellerId,
+       estateType: "house"
+       },
     });
   }
 
   static async findResidentialBySeller(sellerId, options = {}) {
     return this.list({
       ...options,
-      filters: { ...(options.filters || {}), sellerId, isLandEstate: false },
+      filters: { ...(options.filters || {}), sellerId, estateType: "house" },
     });
   }
 
