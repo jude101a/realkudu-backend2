@@ -35,9 +35,9 @@ router.post(
 
 protectedRouter.use(protect);
 
-protectedRouter.post("createImages", validate({ body: createImageSchema }), insertPropertyImage);
-router.post("bulk/insertMultipleImages", insertMultipleImages)
-protectedRouter.delete("deleteSingleImage/:imageId", validate({ params: imageIdParamSchema }), deleteImage);
+protectedRouter.post("/createImages", validate({ body: createImageSchema }), insertPropertyImage);
+router.post("/bulk/insertMultipleImages", insertMultipleImages)
+protectedRouter.delete("/deleteSingleImage/:imageId", validate({ params: imageIdParamSchema }), deleteImage);
 protectedRouter.delete(
   "/property/:propertyId",
   validate({ params: propertyIdParamSchema }),
