@@ -62,6 +62,42 @@ class ImagesModel {
     return rows;
   }
 
+
+  static async insertMultipleImages(propertyId, images = [], client = null) {
+  const db = client || pool;
+
+  if (!Array.isArray(images) || images.length === 0) {
+    return [];
+  }
+
+  const values = [];
+  const placeholders = [];
+
+  images.forEach((img, index) => {
+    const baseIndex = index * 3;
+
+    placeholders.push(
+      `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`
+    );
+
+    values.push(
+      propertyId,
+      img.imageUrl,
+      img.isCover ?? false
+    );
+  });
+
+  const query = `
+    INSERT INTO ${TABLE} (property_id, image_url, is_cover)
+    VALUES ${placeholders.join(", ")}
+    RETURNING ${SELECT_COLUMNS}
+  `;
+
+  const { rows } = await db.query(query, values);
+
+  return rows;
+}
+
   static async deleteImage(imageId, client = null) {
     const db = client || pool;
 

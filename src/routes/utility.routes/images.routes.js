@@ -5,6 +5,7 @@ import {
   deletePropertyImages,
   getMultiplePropertyImages,
   getPropertyImage,
+  insertMultipleImages,
   insertPropertyImage,
 } from "../../controllers/utillity.controller/images.controller.js";
 import { protect } from "../../middlewares/auth.middleware.js";
@@ -31,10 +32,11 @@ router.post(
   getMultiplePropertyImages
 );
 
+
 protectedRouter.use(protect);
 
 protectedRouter.post("createImages", validate({ body: createImageSchema }), insertPropertyImage);
-
+router.post("bulk/insertMultipleImages", insertMultipleImages)
 protectedRouter.delete("deleteSingleImage/:imageId", validate({ params: imageIdParamSchema }), deleteImage);
 protectedRouter.delete(
   "/property/:propertyId",

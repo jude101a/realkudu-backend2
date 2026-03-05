@@ -46,6 +46,11 @@ export const insertPropertyImage = wrap(async (req, res) => {
   return ok(res, created, "Image created successfully", undefined, 201);
 });
 
+export const insertMultipleImages = wrap(async (req, res) => {
+  const created = await ImagesModel.insertMultipleImages(req.body);
+  return ok(res, created, "Images created successfully", undefined, 201);
+});
+
 export const getPropertyImage = wrap(async (req, res) => {
   const images = await ImagesModel.getPropertyImage(req.params.propertyId);
   return ok(res, images, "Property images retrieved successfully", {
