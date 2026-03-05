@@ -159,7 +159,6 @@ class EstateModel {
       ...options,
       filters: { ...(options.filters || {}),
        sellerId,
-       estateType: "house"
        },
     });
   }
