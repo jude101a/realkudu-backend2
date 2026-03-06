@@ -64,15 +64,11 @@ protectedRouter.post(
 );
 
 protectedRouter.delete(
-  "/deleteSingleImage/:imageId",
+  "/deleteSingleImage/:imageUrl",
   validate({ params: imageIdParamSchema }),
   deleteImage
 );
-protectedRouter.delete(
-  "/:imageId",
-  validate({ params: imageIdParamSchema }),
-  deleteImage
-);
+
 
 protectedRouter.delete(
   "/property/:propertyId",
