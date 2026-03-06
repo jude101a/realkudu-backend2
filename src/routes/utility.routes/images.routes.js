@@ -63,7 +63,7 @@ protectedRouter.post(
   insertMultipleImages
 );
 
-protectedRouter.delete(
+router.delete(
   "/deleteSingleImage/:imageUrl",
   validate({ params: imageUrlParamSchema }),
   deleteImage
