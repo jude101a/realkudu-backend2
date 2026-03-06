@@ -98,14 +98,14 @@ class ImagesModel {
   return rows;
 }
 
-  static async deleteImage(imageId, client = null) {
-    const db = client || pool;
+  static async deleteImage(imageId) {
+    const db = pool;
 
     const { rows } = await db.query(
       `
       UPDATE ${TABLE}
       SET deleted_at = NOW()
-      WHERE imageid = $1
+      WHERE image_url = $1
         AND deleted_at IS NULL
       RETURNING ${SELECT_COLUMNS}
       `,

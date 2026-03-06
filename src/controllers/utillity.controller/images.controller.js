@@ -71,7 +71,7 @@ export const getMultiplePropertyImages = wrap(async (req, res) => {
 });
 
 export const deleteImage = wrap(async (req, res) => {
-  const deleted = await ImagesModel.deleteImage(req.params.imageId);
+  const deleted = await ImagesModel.deleteImage(req.params.imageUrl);
   if (!deleted) return fail(res, 404, "Image not found", "NOT_FOUND");
   return ok(res, deleted, "Image deleted successfully");
 });

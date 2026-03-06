@@ -3,7 +3,7 @@ import Joi from "joi";
 const uuid = Joi.string().guid({ version: ["uuidv4", "uuidv5"] });
 
 export const imageIdParamSchema = Joi.object({
-  imageId: uuid.required(),
+  imageUrl: uuid.required(),
 });
 
 export const propertyIdParamSchema = Joi.object({
