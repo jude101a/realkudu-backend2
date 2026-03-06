@@ -21,13 +21,13 @@ const router = Router();
 const protectedRouter = Router();
 
 router.get(
-  "getPropertyImages/:propertyId",
+  "/getPropertyImages/:propertyId",
   validate({ params: propertyIdParamSchema }),
   getPropertyImage
 );
 
 router.post(
-  "bulk/getMulttipleImagesByid",
+  "/bulk/getMulttipleImagesByid",
   validate({ body: bulkPropertyIdsBodySchema }),
   getMultiplePropertyImages
 );
