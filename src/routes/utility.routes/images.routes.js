@@ -51,11 +51,6 @@ protectedRouter.post(
   validate({ body: createImageSchema }),
   insertPropertyImage
 );
-protectedRouter.post(
-  "/",
-  validate({ body: createImageSchema }),
-  insertPropertyImage
-);
 
 protectedRouter.post(
   "/bulk/insertMultipleImages",

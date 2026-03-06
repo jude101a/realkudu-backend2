@@ -98,7 +98,7 @@ class ImagesModel {
   return rows;
 }
 
-  static async deleteImage(imageId) {
+  static async deleteImage(imageUrl) {
     const db = pool;
 
     const { rows } = await db.query(
@@ -109,7 +109,7 @@ class ImagesModel {
         AND deleted_at IS NULL
       RETURNING ${SELECT_COLUMNS}
       `,
-      [imageId]
+      [imageUrl]
     );
 
     return rows[0] || null;
