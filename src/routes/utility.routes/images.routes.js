@@ -14,7 +14,7 @@ import {
   bulkPropertyIdsBodySchema,
   createImageSchema,
   createMultipleImagesSchema,
-  imageIdParamSchema,
+  imageUrlParamSchema,
   propertyIdParamSchema,
 } from "../../validators/images.validator.js";
 
@@ -65,7 +65,7 @@ protectedRouter.post(
 
 protectedRouter.delete(
   "/deleteSingleImage/:imageUrl",
-  validate({ params: imageIdParamSchema }),
+  validate({ params: imageUrlParamSchema }),
   deleteImage
 );
 
