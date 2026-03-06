@@ -19,3 +19,17 @@ export const createImageSchema = Joi.object({
 export const bulkPropertyIdsBodySchema = Joi.object({
   propertyIds: Joi.array().items(uuid.required()).min(1).max(200).unique().required(),
 });
+
+export const createMultipleImagesSchema = Joi.object({
+  propertyId: uuid.required(),
+  images: Joi.array()
+    .items(
+      Joi.object({
+        imageUrl: Joi.string().uri().max(2048).required(),
+        isCover: Joi.boolean().default(false),
+      })
+    )
+    .min(1)
+    .max(200)
+    .required(),
+});

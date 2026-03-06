@@ -323,6 +323,41 @@ async function createPropertyTables(client) {
   `);
 }
 
+async function ensureImagesTableHotfix(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS images (
+      imageId UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id UUID NOT NULL,
+      image_url TEXT NOT NULL,
+      is_cover BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ
+    );
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION set_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at = NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+
+  await client.query(`
+    DROP TRIGGER IF EXISTS trg_images_updated_at ON images;
+    CREATE TRIGGER trg_images_updated_at
+    BEFORE UPDATE ON images
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+  `);
+
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_images_property_id ON images(property_id)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_images_deleted_at ON images(deleted_at)`);
+}
+
 async function createFinanceAndOpsTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS tenant_meta (
@@ -438,6 +473,7 @@ async function ensureUpdatedAtTrigger(client) {
     "tenant_meta",
     "finance_accounts",
     "property_orders",
+    "images",
   ];
 
   for (const tableName of triggerTables) {
@@ -492,6 +528,9 @@ export async function initializeDatabaseTablesSafe() {
     await runStep(client, "extensions", async () => ensureExtensions(client));
     await runStep(client, "_migration_history", async () =>
       ensureMigrationHistory(client)
+    );
+    await runStep(client, "images table hotfix", async () =>
+      ensureImagesTableHotfix(client)
     );
 
     if (await alreadyApplied(client)) {
@@ -573,3 +612,4 @@ export async function initializeDatabaseTablesSafe() {
     client.release();
   }
 }
+

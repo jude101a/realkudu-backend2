@@ -28,8 +28,8 @@ class ImagesModel {
     return rows[0] || null;
   }
 
-  static async getPropertyImage(propertyId, client = null) {
-    const db = client || pool;
+  static async getPropertyImage(propertyId) {
+    const db = pool;
 
     const { rows } = await db.query(
       `

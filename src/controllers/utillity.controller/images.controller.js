@@ -47,7 +47,8 @@ export const insertPropertyImage = wrap(async (req, res) => {
 });
 
 export const insertMultipleImages = wrap(async (req, res) => {
-  const created = await ImagesModel.insertMultipleImages(req.body);
+  const { propertyId, images } = req.body;
+  const created = await ImagesModel.insertMultipleImages(propertyId, images);
   return ok(res, created, "Images created successfully", undefined, 201);
 });
 
@@ -92,3 +93,4 @@ export const bulkDeletePropertyImages = wrap(async (req, res) => {
     propertyIds,
   });
 });
+
