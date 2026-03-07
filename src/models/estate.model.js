@@ -105,7 +105,7 @@ class EstateModel {
 
   static async findById(estateId) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE estate_id = $1 AND deleted_at IS NULL LIMIT 1`,
+      `SELECT * FROM ${TABLE} WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
       [estateId]
     );
     return rows[0] || null;
