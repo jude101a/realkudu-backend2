@@ -1,5 +1,14 @@
 import HouseModel from "../models/house.model.js";
 
+const parseBooleanQuery = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value === "boolean") return value;
+  const normalized = String(value).toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return undefined;
+};
+
 /**
  * @swagger
  * /api/houses:
@@ -37,7 +46,7 @@ export const createHouse = async (req, res) => {
     };
 
     const result = await HouseModel.create(payload);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -70,11 +79,11 @@ export const getHouse = async (req, res) => {
   try {
     const house = await HouseModel.findById(req.params.id);
 
-    if (!house.rowCount) {
+    if (!house) {
       return res.status(404).json({ message: "House not found" });
     }
 
-    res.json(house.rows[0]);
+    res.json(house);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -96,7 +105,23 @@ export const getHouse = async (req, res) => {
  */
 export const getAllHouses = async (req, res) => {
   try {
-    const houses = await HouseModel.findAll();
+    const { page, limit, sortBy, sortOrder, sellerId, estateId, isSingleHouse, state, lga, type, q } = req.query;
+    const filters = {
+      sellerId,
+      estateId,
+      isSingleHouse: parseBooleanQuery(isSingleHouse),
+      state,
+      lga,
+      type,
+      q,
+    };
+    const houses = await HouseModel.findAll({
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+      filters,
+    });
     res.json(houses.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -132,6 +157,15 @@ export const getHousesByEstate = async (req, res) => {
   }
 };
 
+export const getHousesBySeller = async (req, res) => {
+  try {
+    const houses = await HouseModel.findBySeller(req.params.sellerId);
+    res.json(houses.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 /**
  * @swagger
  * /api/houses/standalone/:sellerId:
@@ -154,7 +188,8 @@ export const getHousesByEstate = async (req, res) => {
  */
 export const getStandaloneHouses = async (req, res) => {
   try {
-    const { sellerId } = req.query;
+    const sellerId = req.params.sellerId || req.query.sellerId;
+    const isSingleHouse = parseBooleanQuery(req.query.isSingleHouse) ?? true;
 
     if (!sellerId) {
       return res.status(400).json({
@@ -162,9 +197,7 @@ export const getStandaloneHouses = async (req, res) => {
       });
     }
 
-    const result = await HouseModel.findStandaloneBySeller(
-      sellerId
-    );
+    const result = await HouseModel.findStandaloneBySeller(sellerId, isSingleHouse);
 
     res.status(200).json(result.rows ?? []);
   } catch (error) {
@@ -204,7 +237,8 @@ export const getStandaloneHouses = async (req, res) => {
  */
 export const getEstateHousesBySeller = async (req, res) => {
   try {
-    const { sellerId, estateId } = req.query;
+    const sellerId = req.params.sellerId || req.query.sellerId;
+    const estateId = req.params.estateId || req.query.estateId;
 
     if (!sellerId || !estateId) {
       return res.status(400).json({
@@ -212,10 +246,7 @@ export const getEstateHousesBySeller = async (req, res) => {
       });
     }
 
-    const result = await HouseModel.findEstateHousesBySeller(
-      sellerId,
-      estateId
-    );
+    const result = await HouseModel.getEstateHousesBySeller(sellerId, estateId);
 
     res.status(200).json(result.rows ?? []);
   } catch (error) {
@@ -262,7 +293,7 @@ export const updateHouseCover = async (req, res) => {
       req.params.id,
       req.body.coverImageUrl
     );
-    res.json(house.rows[0]);
+    res.json(house);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -303,7 +334,7 @@ export const updateHouseLawyer = async (req, res) => {
       req.params.id,
       req.body.lawyerId ?? null
     );
-    res.json(house.rows[0]);
+    res.json(house);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -344,7 +375,7 @@ export const updateHouseCaretaker = async (req, res) => {
       req.params.id,
       req.body.caretakerId ?? null
     );
-    res.json(house.rows[0]);
+    res.json(house);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -382,7 +413,7 @@ export const updateHouse = async (req, res) => {
       req.params.id,
       req.body
     );
-    res.json(house.rows[0]);
+    res.json(house);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
