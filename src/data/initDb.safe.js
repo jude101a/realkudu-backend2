@@ -145,14 +145,14 @@ async function createCoreTables(client) {
 async function createPropertyTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS estates (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      estate_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
       name VARCHAR(255) NOT NULL,
       address TEXT,
       lga VARCHAR(100),
       state VARCHAR(100),
       cover_image_url TEXT,
-      estate_type VARCHAR(15) CHECK (estate_type IN ('land', 'building', 'combination')),
+      estate_type VARCHAR(150) CHECK (estate_type IN ('land', 'building', 'combination')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       deleted_at TIMESTAMPTZ
@@ -178,7 +178,7 @@ async function createPropertyTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS houses (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      estate_id UUID REFERENCES estates(id) ON DELETE SET NULL,
+      estate_id UUID REFERENCES estates(estate_id) ON DELETE SET NULL,
       seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
       lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
       caretaker_id UUID REFERENCES users(id) ON DELETE SET NULL,

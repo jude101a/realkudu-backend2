@@ -60,7 +60,8 @@ export const createEstate = wrap(async (req, res) => {
 });
 
 export const getEstate = wrap(async (req, res) => {
-  const estate = await EstateModel.findById(req.params.id);
+  const estateId = req.params.estateId; 
+  const estate = await EstateModel.findById(estateId);
   if (!estate) return fail(res, 404, "Estate not found", "NOT_FOUND");
   return ok(res, estate, "Estate retrieved successfully");
 });

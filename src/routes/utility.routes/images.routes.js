@@ -60,7 +60,7 @@ protectedRouter.post(
 
 router.delete(
   "/deleteSingleImage/:imageUrl",
-  validate({ params: imageUrlParamSchema }),
+  
   deleteImage
 );
 
