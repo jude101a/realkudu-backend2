@@ -189,6 +189,7 @@ async function createPropertyTables(client) {
       state VARCHAR(100),
       lga VARCHAR(100),
       is_single_house BOOLEAN DEFAULT FALSE,
+      house_description TEXT
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       deleted_at TIMESTAMPTZ

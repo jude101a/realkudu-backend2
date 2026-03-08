@@ -12,6 +12,7 @@ import {
   updateHouseCaretaker,
   updateHouseCover,
   updateHouseLawyer,
+  updateHouseDescription,
 } from "../controllers/house.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
@@ -44,7 +45,14 @@ router.get("/estateHouses/:sellerId/:estateId", validate({ params: sellerEstateP
 router.get("/estateHouses", validate({ query: estateHousesQuerySchema }), getEstateHousesBySeller);
 router.get("/seller/:sellerId", validate({ params: sellerIdParamSchema, query: houseListQuerySchema }), getHousesBySeller);
 router.get("/estate/:estateId", validate({ params: estateIdParamSchema, query: houseListQuerySchema }), getHousesByEstate);
+
 router.get("/:id", validate({ params: houseIdParamSchema }), getHouse);
+protectedRouter.put(
+  "/updateHouseDescription/:houseId",
+  protect,
+  validate({ params: houseIdParamSchema, }),
+  updateHouseDescription
+);
 
 /* Protected write routes */
 protectedRouter.post("/", protect, validate({ body: createHouseSchema }), createHouse);
@@ -62,6 +70,8 @@ protectedRouter.put(
   validate({ params: houseIdParamSchema, body: updateHouseCoverSchema }),
   updateHouseCover
 );
+
+
 protectedRouter.put(
   "/:id/lawyer",
   protect,

@@ -302,6 +302,47 @@ export const updateHouseCover = async (req, res) => {
 
 /**
  * @swagger
+ * /api/houses/{id}/cover:
+ *   put:
+ *     summary: Update house cover image
+ *     description: Update the cover image for a house
+ *     tags:
+ *       - Houses
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               coverImageUrl:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Cover image updated
+ *       500:
+ *         description: Server error
+ */
+export const updateHouseDescription = async (req, res) => {
+  try {
+    const house = await HouseModel.updateCoverImage(
+      req.params.id,
+      req.body.houseDescription
+    );
+    res.json(house);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * @swagger
  * /api/houses/{id}/lawyer:
  *   put:
  *     summary: Assign lawyer to house

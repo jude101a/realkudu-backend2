@@ -177,6 +177,10 @@ class HouseModel {
     return this.updateFields(id, { coverImageUrl });
   }
 
+static async updateHouseDescription(id, houseDescription) {
+    return this.updateFields(id, { houseDescription });
+  }
+
   static async updateLawyer(id, lawyerId) {
     return this.updateFields(id, { lawyerId });
   }
@@ -200,6 +204,7 @@ class HouseModel {
       "is_single_house",
       "state",
       "lga",
+      "house_description"
     ];
 
     const entries = Object.entries(payload).filter(([column]) => allowed.includes(column));
