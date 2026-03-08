@@ -180,6 +180,17 @@ class HouseModel {
 static async updateHouseDescription(id, houseDescription) {
     return this.updateFields(id, { houseDescription });
   }
+  static async softDeleteHouse(id) {
+    const db =  pool;
+    const { rows } = await db.query(
+      `UPDATE ${TABLE}
+       SET id = $1, deleted_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING *`,
+      [id]
+    );
+    return rows[0] || null;
+  }
 
   static async updateLawyer(id, lawyerId) {
     return this.updateFields(id, { lawyerId });

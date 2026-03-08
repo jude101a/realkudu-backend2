@@ -489,3 +489,11 @@ export const deleteHouse = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+export const softDeleteHouse = async (req, res) => {
+  try {
+    await HouseModel.softDeleteHouse(req.params.id);
+    res.json({ message: "House deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

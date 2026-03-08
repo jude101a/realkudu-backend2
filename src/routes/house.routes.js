@@ -13,6 +13,7 @@ import {
   updateHouseCover,
   updateHouseLawyer,
   updateHouseDescription,
+  softDeleteHouse
 } from "../controllers/house.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
@@ -96,6 +97,7 @@ protectedRouter.put(
   validate({ params: houseIdParamSchema, body: updateHouseCaretakerSchema }),
   updateHouseCaretaker
 );
+router.put("softDeleteHouse/:id", softDeleteHouse)
 protectedRouter.put("/:id", protect, validate({ params: houseIdParamSchema, body: updateHouseSchema }), updateHouse);
 protectedRouter.put("/updateHouse/:id", protect, validate({ params: houseIdParamSchema, body: updateHouseSchema }), updateHouse);
 
