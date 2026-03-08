@@ -152,6 +152,7 @@ export const getHousesByEstate = async (req, res) => {
   try {
     const houses = await HouseModel.findByEstate(req.params.estateId);
     res.json(houses.rows);
+    console.log(res.json(houses.rows))
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

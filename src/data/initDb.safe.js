@@ -358,6 +358,45 @@ async function ensureImagesTableHotfix(client) {
   await client.query(`CREATE INDEX IF NOT EXISTS idx_images_deleted_at ON images(deleted_at)`);
 }
 
+const STARTUP_SCHEMA_RECONCILIATION = Object.freeze({
+  houses: [
+    { name: "state", typeSql: "VARCHAR(100)" },
+    { name: "lga", typeSql: "VARCHAR(100)" },
+    { name: "cover_image_url", typeSql: "TEXT" },
+    { name: "is_single_house", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  ],
+  estates: [
+    { name: "lga", typeSql: "VARCHAR(100)" },
+    { name: "state", typeSql: "VARCHAR(100)" },
+    { name: "cover_image_url", typeSql: "TEXT" },
+  ],
+  images: [
+    { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
+    { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  ],
+});
+
+async function ensureTableColumns(client, tableName, columns) {
+  for (const column of columns) {
+    const parts = [
+      `ALTER TABLE ${tableName}`,
+      `ADD COLUMN IF NOT EXISTS ${column.name} ${column.typeSql}`,
+    ];
+    if (column.defaultSql !== undefined) {
+      parts.push(`DEFAULT ${column.defaultSql}`);
+    }
+    await client.query(`${parts.join(" ")};`);
+  }
+}
+
+async function ensureStartupSchemaReconciliation(client) {
+  for (const [tableName, columns] of Object.entries(
+    STARTUP_SCHEMA_RECONCILIATION
+  )) {
+    await ensureTableColumns(client, tableName, columns);
+  }
+}
+
 async function createFinanceAndOpsTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS tenant_meta (
@@ -532,6 +571,9 @@ export async function initializeDatabaseTablesSafe() {
     await runStep(client, "images table hotfix", async () =>
       ensureImagesTableHotfix(client)
     );
+    await runStep(client, "startup schema reconciliation", async () =>
+      ensureStartupSchemaReconciliation(client)
+    );
 
     if (await alreadyApplied(client)) {
       await client.query("COMMIT");
@@ -612,4 +654,3 @@ export async function initializeDatabaseTablesSafe() {
     client.release();
   }
 }
-

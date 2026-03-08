@@ -56,6 +56,7 @@ export const createHouseSchema = Joi.object({
   name: Joi.string().trim().min(2).max(255).required(),
   type: Joi.string().trim().max(100).allow(null, ""),
   address: Joi.string().trim().min(3).max(2000).allow(null, ""),
+  coverImage: Joi.string().uri().max(2048).allow(null, ""),
   coverImageUrl: Joi.string().uri().max(2048).allow(null, ""),
   isSingleHouse: Joi.boolean().default(false),
   state: Joi.string().trim().max(100).allow(null, ""),
@@ -63,8 +64,9 @@ export const createHouseSchema = Joi.object({
 });
 
 export const updateHouseCoverSchema = Joi.object({
-  coverImageUrl: Joi.string().uri().max(2048).required(),
-});
+  coverImage: Joi.string().uri().max(2048),
+  coverImageUrl: Joi.string().uri().max(2048),
+}).or("coverImageUrl", "coverImage");
 
 export const updateHouseLawyerSchema = Joi.object({
   lawyerId: uuid.allow(null).required(),
@@ -82,6 +84,7 @@ export const updateHouseSchema = Joi.object({
   name: Joi.string().trim().min(2).max(255),
   type: Joi.string().trim().max(100).allow(null, ""),
   address: Joi.string().trim().min(3).max(2000).allow(null, ""),
+  coverImage: Joi.string().uri().max(2048).allow(null, ""),
   coverImageUrl: Joi.string().uri().max(2048).allow(null, ""),
   isSingleHouse: Joi.boolean(),
   state: Joi.string().trim().max(100).allow(null, ""),
