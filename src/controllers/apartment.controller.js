@@ -42,8 +42,41 @@ const parsePagination = (query) => ({
   sortOrder: query.sortOrder || "desc",
 });
 
+const normalizeApartmentPayload = (payload = {}) => {
+  const normalized = { ...payload };
+  if (normalized.houseId === undefined && normalized.houseID !== undefined) {
+    normalized.houseId = normalized.houseID;
+  }
+  if (normalized.sellerId === undefined && normalized.sellerID !== undefined) {
+    normalized.sellerId = normalized.sellerID;
+  }
+  if (normalized.tenantId === undefined && normalized.tenantID !== undefined) {
+    normalized.tenantId = normalized.tenantID;
+  }
+  if (
+    normalized.numberOfKitchens === undefined &&
+    normalized.numberOfKitchen !== undefined
+  ) {
+    normalized.numberOfKitchens = normalized.numberOfKitchen;
+  }
+
+  const boolFields = [
+    "hasRunningWater",
+    "hasElectricity",
+    "hasParkingSpace",
+    "hasInternet",
+  ];
+  for (const field of boolFields) {
+    if (normalized[field] === 1) normalized[field] = true;
+    if (normalized[field] === 0) normalized[field] = false;
+  }
+
+  return normalized;
+};
+
 export const createApartment = wrap(async (req, res) => {
-  const { houseId, sellerId, apartmentAddress } = req.body || {};
+  const payload = normalizeApartmentPayload(req.body || {});
+  const { houseId, sellerId, apartmentAddress } = payload;
   if (!houseId || !sellerId || !apartmentAddress) {
     return fail(res, 400, "houseId, sellerId and apartmentAddress are required", "VALIDATION_ERROR");
   }
@@ -51,22 +84,23 @@ export const createApartment = wrap(async (req, res) => {
     return fail(res, 400, "houseId and sellerId must be valid UUIDs", "VALIDATION_ERROR");
   }
 
-  const apartment = await ApartmentModel.create(req.body);
+  const apartment = await ApartmentModel.create(payload);
   return ok(res, apartment, "Apartment created successfully", undefined, 201);
 });
 
 export const updateApartment = wrap(async (req, res) => {
   if (!isUuid(req.params.id)) return fail(res, 400, "id must be a valid UUID", "VALIDATION_ERROR");
-  const apartment = await ApartmentModel.update(req.params.id, req.body || {});
+  const payload = normalizeApartmentPayload(req.body || {});
+  const apartment = await ApartmentModel.update(req.params.id, payload);
   if (!apartment) return fail(res, 404, "Apartment not found", "NOT_FOUND");
   return ok(res, apartment, "Apartment updated successfully");
 });
 
 export const updateApartmentTenant = wrap(async (req, res) => {
   if (!isUuid(req.params.id)) return fail(res, 400, "id must be a valid UUID", "VALIDATION_ERROR");
-  const { tenantId } = req.body || {};
-  if (!tenantId || !isUuid(tenantId)) {
-    return fail(res, 400, "tenantId must be a valid UUID", "VALIDATION_ERROR");
+  const tenantId = req.body?.tenantId ?? req.body?.tenantID ?? null;
+  if (tenantId !== null && !isUuid(tenantId)) {
+    return fail(res, 400, "tenantId must be a valid UUID or null", "VALIDATION_ERROR");
   }
 
   const apartment = await ApartmentModel.updateTenant(req.params.id, tenantId);
@@ -87,10 +121,11 @@ export const deleteAllApartments = wrap(async (_req, res) => {
 });
 
 export const getApartmentsByHouse = wrap(async (req, res) => {
-  if (!isUuid(req.params.houseId)) {
+  const houseId = req.params.houseId || req.params.houseID;
+  if (!isUuid(houseId)) {
     return fail(res, 400, "houseId must be a valid UUID", "VALIDATION_ERROR");
   }
-  const rows = await ApartmentModel.findByHouseId(req.params.houseId);
+  const rows = await ApartmentModel.findByHouseId(houseId);
   return ok(res, rows, "Apartments retrieved successfully");
 });
 
@@ -173,4 +208,60 @@ export const getApartmentsStats = wrap(async (req, res) => {
 
   const stats = ApartmentModel.calculateStats(result.rows);
   return ok(res, { ...stats, apartments: result.rows }, "Statistics calculated successfully");
+});
+
+export const createTenantMeta = wrap(async (req, res) => {
+  const record = await ApartmentModel.createTenantMeta(req.body || {});
+  return ok(res, record, "Tenant meta created successfully", undefined, 201);
+});
+
+export const getTenantMetaByTenant = wrap(async (req, res) => {
+  const tenantId = req.query.tenantID;
+  const record = await ApartmentModel.getTenantMetaByTenant(tenantId);
+  if (!record) return fail(res, 404, "Tenant meta not found", "NOT_FOUND");
+  return ok(res, record, "Tenant meta retrieved successfully");
+});
+
+export const getTenantMetaByProperty = wrap(async (req, res) => {
+  const propertyId = req.query.propertyID;
+  const record = await ApartmentModel.getTenantMetaByProperty(propertyId);
+  if (!record) return fail(res, 404, "Tenant meta not found", "NOT_FOUND");
+  return ok(res, record, "Tenant meta retrieved successfully");
+});
+
+export const markRentPaid = wrap(async (req, res) => {
+  const record = await ApartmentModel.markRentPaid(
+    req.params.tenantMetaId,
+    req.body.paymentDate,
+    req.body.nextDueDate
+  );
+  if (!record) return fail(res, 404, "Tenant meta not found", "NOT_FOUND");
+  return ok(res, record, "Rent marked as paid");
+});
+
+export const updateOutstandingBalance = wrap(async (req, res) => {
+  const record = await ApartmentModel.updateOutstandingBalance(
+    req.params.tenantMetaId,
+    req.body.amount
+  );
+  if (!record) return fail(res, 404, "Tenant meta not found", "NOT_FOUND");
+  return ok(res, record, "Outstanding balance updated");
+});
+
+export const serveTenantNotice = wrap(async (req, res) => {
+  const record = await ApartmentModel.serveNotice(req.params.tenantMetaId);
+  if (!record) return fail(res, 404, "Tenant meta not found", "NOT_FOUND");
+  return ok(res, record, "Notice served");
+});
+
+export const terminateTenantTenancy = wrap(async (req, res) => {
+  const record = await ApartmentModel.terminateTenancy(req.params.tenantMetaId);
+  if (!record) return fail(res, 404, "Tenant meta not found", "NOT_FOUND");
+  return ok(res, record, "Tenancy terminated");
+});
+
+export const deleteTenantMeta = wrap(async (req, res) => {
+  const record = await ApartmentModel.deleteTenantMeta(req.params.tenantMetaId);
+  if (!record) return fail(res, 404, "Tenant meta not found", "NOT_FOUND");
+  return ok(res, { id: req.params.tenantMetaId }, "Tenant meta deleted successfully");
 });

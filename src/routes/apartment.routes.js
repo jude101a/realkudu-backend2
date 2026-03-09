@@ -1,15 +1,23 @@
 import { Router } from "express";
 import {
   createApartment,
+  createTenantMeta,
   deleteAllApartments,
   deleteApartment,
+  deleteTenantMeta,
   filterApartments,
   getAllApartments,
   getApartmentsByHouse,
   getApartmentsStats,
+  getTenantMetaByProperty,
+  getTenantMetaByTenant,
   listApartments,
+  markRentPaid,
   searchApartments,
+  serveTenantNotice,
+  terminateTenantTenancy,
   updateApartment,
+  updateOutstandingBalance,
   updateApartmentTenant,
 } from "../controllers/apartment.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
@@ -17,11 +25,17 @@ import { requireRole } from "../middlewares/role.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import {
   apartmentIdParamSchema,
+  createTenantMetaSchema,
   createApartmentSchema,
   filterQuerySchema,
   houseIdParamSchema,
+  markRentPaidSchema,
   paginationQuerySchema,
   searchQuerySchema,
+  tenantMetaByPropertyQuerySchema,
+  tenantMetaByTenantQuerySchema,
+  tenantMetaIdParamSchema,
+  updateOutstandingBalanceSchema,
   updateApartmentSchema,
   updateTenantSchema,
 } from "../validators/apartment.validator.js";
@@ -38,6 +52,8 @@ router.get("/v2/list", validate({ query: filterQuerySchema }), listApartments);
 router.get("/v2/search", validate({ query: searchQuerySchema }), searchApartments);
 router.get("/v2/filter", validate({ query: filterQuerySchema }), filterApartments);
 router.get("/v2/stats", validate({ query: filterQuerySchema }), getApartmentsStats);
+router.get("/tenant-meta/by-tenant", validate({ query: tenantMetaByTenantQuerySchema }), getTenantMetaByTenant);
+router.get("/tenant-meta/by-property", validate({ query: tenantMetaByPropertyQuerySchema }), getTenantMetaByProperty);
 
 /* Protected write routes */
 protectedRouter.use(protect);
@@ -51,6 +67,36 @@ protectedRouter.put(
   "/:id/tenant",
   validate({ params: apartmentIdParamSchema, body: updateTenantSchema }),
   updateApartmentTenant
+);
+protectedRouter.post(
+  "/tenant-meta",
+  validate({ body: createTenantMetaSchema }),
+  createTenantMeta
+);
+protectedRouter.put(
+  "/tenant-meta/:tenantMetaId/mark-rent-paid",
+  validate({ params: tenantMetaIdParamSchema, body: markRentPaidSchema }),
+  markRentPaid
+);
+protectedRouter.put(
+  "/tenant-meta/:tenantMetaId/outstanding-balance",
+  validate({ params: tenantMetaIdParamSchema, body: updateOutstandingBalanceSchema }),
+  updateOutstandingBalance
+);
+protectedRouter.put(
+  "/tenant-meta/:tenantMetaId/serve-notice",
+  validate({ params: tenantMetaIdParamSchema }),
+  serveTenantNotice
+);
+protectedRouter.put(
+  "/tenant-meta/:tenantMetaId/terminate-tenancy",
+  validate({ params: tenantMetaIdParamSchema }),
+  terminateTenantTenancy
+);
+protectedRouter.delete(
+  "/tenant-meta/:tenantMetaId",
+  validate({ params: tenantMetaIdParamSchema }),
+  deleteTenantMeta
 );
 
 /* Admin destructive routes */

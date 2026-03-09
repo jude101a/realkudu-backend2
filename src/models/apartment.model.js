@@ -3,12 +3,16 @@ import pool from "../config/db.js";
 const TABLE = "apartments";
 
 const FIELD_MAP = Object.freeze({
+  houseID: "house_id",
   houseId: "house_id",
+  sellerID: "seller_id",
   sellerId: "seller_id",
+  tenantID: "tenant_id",
   tenantId: "tenant_id",
   apartmentAddress: "apartment_address",
   houseName: "house_name",
   unitNumber: "unit_number",
+  numberOfKitchen: "number_of_kitchens",
   numberOfBedrooms: "number_of_bedrooms",
   numberOfKitchens: "number_of_kitchens",
   numberOfLivingRooms: "number_of_living_rooms",
@@ -32,6 +36,27 @@ const FIELD_MAP = Object.freeze({
   tenantUpdatedAt: "tenant_updated_at",
 });
 
+const TENANT_META_TABLE = "tenant_meta";
+
+const TENANT_META_FIELD_MAP = Object.freeze({
+  tenantMetaID: "id",
+  tenantID: "tenant_id",
+  propertyID: "property_id",
+  propertyType: "property_type",
+  rentAmount: "rent_amount",
+  rentCurrency: "rent_currency",
+  rentFrequency: "rent_frequency",
+  tenancyStartDate: "tenancy_start_date",
+  tenancyEndDate: "tenancy_end_date",
+  isActiveTenant: "is_active_tenant",
+  hasPaidCurrentRent: "has_paid_current_rent",
+  noticeServed: "notice_served",
+  lastPaymentDate: "last_payment_date",
+  nextDueDate: "next_due_date",
+  outstandingBalance: "outstanding_balance",
+  tenancyStatus: "tenancy_status",
+});
+
 const SORT_FIELDS = Object.freeze({
   id: "id",
   rent_amount: "rent_amount",
@@ -46,6 +71,15 @@ const mapPayloadToDb = (payload = {}) => {
   for (const [k, v] of Object.entries(payload)) {
     if (v === undefined) continue;
     mapped[FIELD_MAP[k] || k] = v;
+  }
+  return mapped;
+};
+
+const mapTenantMetaPayloadToDb = (payload = {}) => {
+  const mapped = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (v === undefined) continue;
+    mapped[TENANT_META_FIELD_MAP[k] || k] = v;
   }
   return mapped;
 };
@@ -240,6 +274,115 @@ class ApartmentModel {
       minRent: total ? Math.min(...rents) : 0,
       maxRent: total ? Math.max(...rents) : 0,
     };
+  }
+
+  static async createTenantMeta(data, client = null) {
+    const db = client || pool;
+    const payload = mapTenantMetaPayloadToDb(data);
+    const columns = Object.keys(payload);
+    const values = Object.values(payload);
+    const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
+
+    const { rows } = await db.query(
+      `INSERT INTO ${TENANT_META_TABLE} (${columns.join(", ")})
+       VALUES (${placeholders})
+       RETURNING *`,
+      values
+    );
+    return rows[0] || null;
+  }
+
+  static async getTenantMetaByTenant(tenantId) {
+    const { rows } = await pool.query(
+      `SELECT * FROM ${TENANT_META_TABLE}
+       WHERE tenant_id = $1 AND deleted_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [tenantId]
+    );
+    return rows[0] || null;
+  }
+
+  static async getTenantMetaByProperty(propertyId) {
+    const { rows } = await pool.query(
+      `SELECT * FROM ${TENANT_META_TABLE}
+       WHERE property_id = $1 AND deleted_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [propertyId]
+    );
+    return rows[0] || null;
+  }
+
+  static async markRentPaid(tenantMetaId, paymentDate, nextDueDate, client = null) {
+    const db = client || pool;
+    const { rows } = await db.query(
+      `UPDATE ${TENANT_META_TABLE}
+       SET has_paid_current_rent = TRUE,
+           last_payment_date = $1,
+           next_due_date = $2,
+           outstanding_balance = 0,
+           updated_at = NOW()
+       WHERE id = $3 AND deleted_at IS NULL
+       RETURNING *`,
+      [paymentDate, nextDueDate, tenantMetaId]
+    );
+    return rows[0] || null;
+  }
+
+  static async updateOutstandingBalance(tenantMetaId, amount, client = null) {
+    const db = client || pool;
+    const { rows } = await db.query(
+      `UPDATE ${TENANT_META_TABLE}
+       SET outstanding_balance = $1,
+           has_paid_current_rent = CASE WHEN $1 <= 0 THEN TRUE ELSE FALSE END,
+           updated_at = NOW()
+       WHERE id = $2 AND deleted_at IS NULL
+       RETURNING *`,
+      [amount, tenantMetaId]
+    );
+    return rows[0] || null;
+  }
+
+  static async serveNotice(tenantMetaId, client = null) {
+    const db = client || pool;
+    const { rows } = await db.query(
+      `UPDATE ${TENANT_META_TABLE}
+       SET notice_served = TRUE,
+           tenancy_status = 'terminated',
+           updated_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING *`,
+      [tenantMetaId]
+    );
+    return rows[0] || null;
+  }
+
+  static async terminateTenancy(tenantMetaId, client = null) {
+    const db = client || pool;
+    const { rows } = await db.query(
+      `UPDATE ${TENANT_META_TABLE}
+       SET is_active_tenant = FALSE,
+           tenancy_status = 'expired',
+           tenancy_end_date = NOW()::date,
+           updated_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING *`,
+      [tenantMetaId]
+    );
+    return rows[0] || null;
+  }
+
+  static async deleteTenantMeta(tenantMetaId, client = null) {
+    const db = client || pool;
+    const { rows } = await db.query(
+      `UPDATE ${TENANT_META_TABLE}
+       SET deleted_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING id`,
+      [tenantMetaId]
+    );
+    return rows[0] || null;
   }
 }
 
