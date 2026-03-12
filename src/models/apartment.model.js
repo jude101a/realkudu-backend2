@@ -12,7 +12,7 @@ const FIELD_MAP = Object.freeze({
   apartmentAddress: "apartment_address",
   state: "state",
   lga : "lga",
-  description: "house_description",
+  description: "description",
   houseName: "house_name",
   unitNumber: "unit_number",
   numberOfKitchen: "number_of_kitchens",
