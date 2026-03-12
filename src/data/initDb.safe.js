@@ -203,6 +203,8 @@ async function createPropertyTables(client) {
       seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
       tenant_id UUID REFERENCES users(id) ON DELETE SET NULL,
       apartment_address TEXT,
+      state TEXT,
+      lga TEXT,
       house_name VARCHAR(255),
       unit_number VARCHAR(50),
       number_of_bedrooms INTEGER DEFAULT 0 CHECK (number_of_bedrooms >= 0),
