@@ -57,7 +57,7 @@ router.get("/tenant-meta/by-property", validate({ query: tenantMetaByPropertyQue
 
 /* Protected write routes */
 protectedRouter.use(protect);
-protectedRouter.post("/createApartment", validate({ body: createApartmentSchema }), createApartment);
+protectedRouter.post("/createApartment", createApartment);
 protectedRouter.put(
   "/:id",
   validate({ params: apartmentIdParamSchema, body: updateApartmentSchema }),
