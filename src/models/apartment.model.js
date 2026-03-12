@@ -69,10 +69,29 @@ const SORT_FIELDS = Object.freeze({
   number_of_bedrooms: "number_of_bedrooms",
 });
 
+const normalizeJsonbValue = (value) => {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return JSON.stringify(parsed);
+    } catch {
+      return JSON.stringify(trimmed);
+    }
+  }
+  return JSON.stringify(value);
+};
+
 const mapPayloadToDb = (payload = {}) => {
   const mapped = {};
   for (const [k, v] of Object.entries(payload)) {
     if (v === undefined) continue;
+    if (k === "images") {
+      mapped[FIELD_MAP[k] || k] = normalizeJsonbValue(v);
+      continue;
+    }
     mapped[FIELD_MAP[k] || k] = v;
   }
   return mapped;
