@@ -29,6 +29,8 @@ export const createApartmentSchema = Joi.object({
   sellerID: uuid,
   sellerId: uuid,
   apartmentAddress: Joi.string().trim().min(3).max(2000).required(),
+  state: Joi.string().trim().min(3),
+  lga : Joi.string().trim(),
   numberOfBedrooms: Joi.number().integer().min(0).default(0),
   numberOfKitchen: Joi.number().integer().min(0),
   numberOfKitchens: Joi.number().integer().min(0),
