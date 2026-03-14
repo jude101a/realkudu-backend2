@@ -4,12 +4,16 @@ const TABLE = "land_properties";
 
 const FIELD_MAP = Object.freeze({
   propertyId: "property_id",
+  propertyID: "property_id",
   estateId: "estate_id",
+  estateID: "estate_id",
   sellerId: "seller_id",
+  sellerID: "seller_id",
   propertyName: "property_name",
   propertyAddress: "property_address",
   stateLocation: "state_location",
   coverImageUrl: "cover_image_url",
+  imageUrl: "cover_image_url",
   galleryImages: "gallery_images",
   availableQuantity: "available_quantity",
   shortDescription: "short_description",
@@ -80,6 +84,14 @@ const buildWhereFilters = (filters = {}, startIndex = 1) => {
     conditions.push(`estate_id = $${idx++}`);
     values.push(filters.estateId);
   }
+  if (filters.isEstateLand !== undefined) {
+    conditions.push(`is_estate_land = $${idx++}`);
+    values.push(filters.isEstateLand);
+  }
+  if (filters.soldOut !== undefined) {
+    conditions.push(`sold_out = $${idx++}`);
+    values.push(filters.soldOut);
+  }
   if (filters.landType) {
     conditions.push(`land_type = $${idx++}`);
     values.push(filters.landType);
@@ -94,7 +106,7 @@ const buildWhereFilters = (filters = {}, startIndex = 1) => {
   }
   if (filters.q) {
     conditions.push(
-      `(property_name ILIKE $${idx} OR property_address ILIKE $${idx} OR short_description ILIKE $${idx} OR long_description ILIKE $${idx})`
+      `(property_name ILIKE $${idx} OR state_location ILIKE $${idx} OR property_address ILIKE $${idx} OR short_description ILIKE $${idx} OR long_description ILIKE $${idx})`
     );
     values.push(`%${filters.q}%`);
     idx++;
@@ -176,6 +188,14 @@ class LandPropertyModel {
     return rows[0] || null;
   }
 
+  static async findNonEstateById(propertyId) {
+    const { rows } = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE property_id = $1 AND is_estate_land = false LIMIT 1`,
+      [propertyId]
+    );
+    return rows[0] || null;
+  }
+
   static async findEstateLands(sellerId) {
     const { rows } = await pool.query(
       `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND is_estate_land = true ORDER BY created_at DESC`,
@@ -229,6 +249,10 @@ class LandPropertyModel {
       [imageUrl, propertyId]
     );
     return rows[0] || null;
+  }
+
+  static async updateFields(propertyId, fields, client = null) {
+    return this.update(propertyId, fields, client);
   }
 
   static async count(filters = {}) {

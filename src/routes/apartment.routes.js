@@ -59,27 +59,27 @@ router.get("/tenant-meta/by-property", validate({ query: tenantMetaByPropertyQue
 protectedRouter.use(protect);
 protectedRouter.post("/createApartment", createApartment);
 protectedRouter.put(
-  "/:id",
+  "/updateApartment/:id",
   validate({ params: apartmentIdParamSchema, body: updateApartmentSchema }),
   updateApartment
 );
 protectedRouter.put(
-  "/:id/tenant",
+  "/updateTenant/:id/tenant",
   validate({ params: apartmentIdParamSchema, body: updateTenantSchema }),
   updateApartmentTenant
 );
 protectedRouter.post(
-  "/tenant-meta",
+  "/createtenantMeta",
   validate({ body: createTenantMetaSchema }),
   createTenantMeta
 );
 protectedRouter.put(
-  "/tenant-meta/:tenantMetaId/mark-rent-paid",
+  "/tenant-meta/mark-rent-paid/:tenantMetaId",
   validate({ params: tenantMetaIdParamSchema, body: markRentPaidSchema }),
   markRentPaid
 );
 protectedRouter.put(
-  "/tenant-meta/:tenantMetaId/outstanding-balance",
+  "/tenant-meta/outstandingBalanceUpdate/:tenantMetaId",
   validate({ params: tenantMetaIdParamSchema, body: updateOutstandingBalanceSchema }),
   updateOutstandingBalance
 );

@@ -29,6 +29,8 @@ export const filterQuerySchema = Joi.object({
   status: Joi.string().max(50),
   sellerId: uuid,
   estateId: uuid,
+  isEstateLand: Joi.boolean(),
+  soldOut: Joi.boolean(),
   landType: Joi.string().max(100),
   minPrice: Joi.number().min(0),
   maxPrice: Joi.number().min(0),
@@ -45,6 +47,7 @@ export const searchQuerySchema = Joi.object({
 });
 
 export const createLandSchema = Joi.object({
+  propertyId: uuid.allow(null),
   estateId: uuid.allow(null),
   sellerId: uuid.required(),
   propertyName: Joi.string().trim().min(2).max(500).required(),
@@ -52,6 +55,7 @@ export const createLandSchema = Joi.object({
   stateLocation: Joi.string().trim().min(2).max(255).required(),
   country: Joi.string().trim().min(2).max(255).required(),
   coverImageUrl: Joi.string().uri().max(2048).allow(null, ""),
+  imageUrl: Joi.string().uri().max(2048).allow(null, ""),
   galleryImages: Joi.alternatives().try(Joi.array().items(Joi.string()), Joi.object()).allow(null),
   price: Joi.number().min(0).required(),
   availableQuantity: Joi.number().min(0).required(),
@@ -86,7 +90,10 @@ export const createLandSchema = Joi.object({
   isEstateLand: Joi.boolean().allow(null),
   soldOut: Joi.boolean().allow(null),
   purchaseDate: Joi.date().iso().allow(null),
-});
+})
+  .rename("propertyID", "propertyId", { ignoreUndefined: true, override: true })
+  .rename("estateID", "estateId", { ignoreUndefined: true, override: true })
+  .rename("sellerID", "sellerId", { ignoreUndefined: true, override: true });
 
 export const updateLandSchema = createLandSchema.fork(
   ["sellerId", "propertyName", "propertyAddress", "stateLocation", "country", "price", "availableQuantity", "shortDescription", "longDescription"],
@@ -100,6 +107,7 @@ export const bulkInsertSchema = Joi.object({
 export const updateCoverSchema = Joi.object({
   image_url: Joi.string().uri().max(2048),
   coverImageUrl: Joi.string().uri().max(2048),
+  imageUrl: Joi.string().uri().max(2048),
 })
-  .or("image_url", "coverImageUrl")
+  .or("image_url", "coverImageUrl", "imageUrl")
   .required();

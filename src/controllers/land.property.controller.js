@@ -44,6 +44,21 @@ const wrap = (handler) => async (req, res) => {
 
 const isUuid = (value) => UUID_RE.test(String(value || ""));
 
+const parseBooleanQuery = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value === "boolean") return value;
+  const normalized = String(value).toLowerCase();
+  if (normalized === "true" || normalized === "1") return true;
+  if (normalized === "false" || normalized === "0") return false;
+  return undefined;
+};
+
+const toNumber = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 const parsePagination = (query) => {
   const page = Math.max(Number.parseInt(query.page, 10) || 1, 1);
   const limit = Math.min(Math.max(Number.parseInt(query.limit, 10) || 10, 1), 100);
@@ -54,11 +69,21 @@ const sanitizeFilters = (query) => ({
   status: query.status,
   sellerId: query.sellerId,
   estateId: query.estateId,
-  minPrice: query.minPrice !== undefined ? Number(query.minPrice) : undefined,
-  maxPrice: query.maxPrice !== undefined ? Number(query.maxPrice) : undefined,
+  minPrice: toNumber(query.minPrice),
+  maxPrice: toNumber(query.maxPrice),
   landType: query.landType,
   q: query.q,
+  soldOut: parseBooleanQuery(query.soldOut),
+  isEstateLand: parseBooleanQuery(query.isEstateLand),
 });
+
+const stripImmutableFields = (payload = {}) => {
+  if (!payload || typeof payload !== "object") return payload;
+  const sanitized = { ...payload };
+  delete sanitized.propertyId;
+  delete sanitized.propertyID;
+  return sanitized;
+};
 
 export const createLandProperty = wrap(async (req, res) => {
   const missing = REQUIRED_CREATE_FIELDS.filter((f) => req.body?.[f] === undefined);
@@ -82,11 +107,29 @@ export const updateLandProperty = wrap(async (req, res) => {
     return fail(res, 400, "propertyId must be a valid UUID", "VALIDATION_ERROR");
   }
 
-  const updated = await LandPropertyModel.update(propertyId, req.body || {});
+  const updated = await LandPropertyModel.update(propertyId, stripImmutableFields(req.body || {}));
   if (!updated) {
     return fail(res, 404, "Land property not found", "NOT_FOUND");
   }
   return ok(res, updated, "Land property updated successfully");
+});
+
+export const updateLandFields = wrap(async (req, res) => {
+  const { propertyId } = req.params;
+  if (!isUuid(propertyId)) {
+    return fail(res, 400, "propertyId must be a valid UUID", "VALIDATION_ERROR");
+  }
+
+  const fields = stripImmutableFields(req.body || {});
+  if (!fields || Object.keys(fields).length === 0) {
+    return fail(res, 400, "At least one field is required", "VALIDATION_ERROR");
+  }
+
+  const updated = await LandPropertyModel.updateFields(propertyId, fields);
+  if (!updated) {
+    return fail(res, 404, "Land property not found", "NOT_FOUND");
+  }
+  return ok(res, updated, "Land property fields updated successfully");
 });
 
 export const deleteLandProperty = wrap(async (req, res) => {
@@ -106,7 +149,7 @@ export const getLandPropertyByID = wrap(async (req, res) => {
   if (!isUuid(propertyId)) {
     return fail(res, 400, "propertyId must be a valid UUID", "VALIDATION_ERROR");
   }
-  const land = await LandPropertyModel.findById(propertyId);
+  const land = await LandPropertyModel.findNonEstateById(propertyId);
   if (!land) {
     return fail(res, 404, "Land property not found", "NOT_FOUND");
   }
@@ -145,7 +188,7 @@ export const getAvailableLands = wrap(async (req, res) => {
     limit,
     sortBy: req.query.sortBy,
     sortOrder: req.query.sortOrder,
-    filters: { status: "available" },
+    filters: { soldOut: false },
   });
   return ok(res, result.rows, "Available land properties retrieved successfully", {
     total: result.total,
@@ -196,7 +239,7 @@ export const getNonEstateLand = wrap(async (req, res) => {
 
 export const updateLandCover = wrap(async (req, res) => {
   const { propertyId } = req.params;
-  const imageUrl = req.body?.image_url || req.body?.coverImageUrl;
+  const imageUrl = req.body?.image_url || req.body?.coverImageUrl || req.body?.imageUrl;
   if (!isUuid(propertyId)) {
     return fail(res, 400, "propertyId must be a valid UUID", "VALIDATION_ERROR");
   }

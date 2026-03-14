@@ -17,6 +17,7 @@ import {
   searchLand,
   searchLandProperties,
   updateLandCover,
+  updateLandFields,
   updateLandProperty,
 } from "../controllers/land.property.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
@@ -61,6 +62,11 @@ protectedRouter.put(
   "/:propertyId",
   validate({ params: propertyIdParamSchema, body: updateLandSchema }),
   updateLandProperty
+);
+protectedRouter.patch(
+  "/:propertyId",
+  validate({ params: propertyIdParamSchema, body: updateLandSchema }),
+  updateLandFields
 );
 protectedRouter.patch(
   "/:propertyId/cover",
