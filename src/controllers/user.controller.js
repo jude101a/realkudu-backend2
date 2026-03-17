@@ -36,6 +36,13 @@ const sanitizeUser = (user) => ({
   lastName: user.last_name,
   role: user.role,
   isVerified: user.is_verified,
+  phoneNumber: user.phone_number,
+  maritalStatus: user.marital_status,
+  occupation: user.occupation,
+  workPlace: user.place_of_work,
+  positionAtWork: user.position_at_work,
+  address: user.address,
+  // age : user.date_of_birth,
 });
 
 export const register = async (req, res, next) => {
