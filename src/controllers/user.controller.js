@@ -42,7 +42,7 @@ const sanitizeUser = (user) => ({
   workPlace: user.place_of_work,
   positionAtWork: user.position_at_work,
   address: user.address,
-  // age : user.date_of_birth,
+  age : user.date_of_birth,
 });
 
 export const register = async (req, res, next) => {

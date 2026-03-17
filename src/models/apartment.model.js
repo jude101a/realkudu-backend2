@@ -230,12 +230,47 @@ class ApartmentModel {
   }
 
   static async findByHouseId(houseId) {
-    const { rows } = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE house_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC`,
-      [houseId]
-    );
-    return rows;
-  }
+  const { rows } = await pool.query(
+    `
+    SELECT
+      a.apartment_id,
+      a.house_id,
+      a.unit_number,
+      a.apartment_type,
+      a.rent_amount,
+      a.cover_image_url,
+      a.tenant_id,
+
+      tm.months_remaining,
+      tm.total_lease_months,
+      tm.next_rent_date,
+      tm.lease_start_date,
+
+      u.id as tenant_id,
+      u.full_name as tenant_name,
+      u.phone as tenant_phone,
+      u.email as tenant_email
+
+    FROM apartments a
+
+    LEFT JOIN tenantsMetaData tm
+      ON tm.apartment_id = a.apartment_id
+      AND tm.deleted_at IS NULL
+
+    LEFT JOIN users u
+      ON u.id = a.tenant_id
+      AND u.deleted_at IS NULL
+
+    WHERE a.house_id = $1
+    AND a.deleted_at IS NULL
+
+    ORDER BY a.created_at DESC
+    `,
+    [houseId]
+  );
+
+  return rows;
+}
 
   static async findAll({ page = 1, limit = 20, sortBy = "created_at", sortOrder = "desc" } = {}) {
     return this.list({ page, limit, sortBy, sortOrder, filters: {} });
