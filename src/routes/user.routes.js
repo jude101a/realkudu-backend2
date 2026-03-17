@@ -49,7 +49,7 @@ router.put(
 /* -------------------------------------------------------------------------- */
 /*                               LOOKUPS                                      */
 /* -------------------------------------------------------------------------- */
-router.get("/email/:email", protect, getUserByEmail);
+router.get("/email/:email", getUserByEmail);
 router.get("/fullname/:email", protect, getUserFullname);
 
 /**
