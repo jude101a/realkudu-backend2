@@ -230,6 +230,7 @@ class ApartmentModel {
   }
 
   static async findByHouseId(houseId) {
+    console.log('model reached');
   const { rows } = await pool.query(
     `
     SELECT
@@ -268,7 +269,7 @@ class ApartmentModel {
     `,
     [houseId]
   );
-
+console.log(rows.length);
   return rows;
 }
 
