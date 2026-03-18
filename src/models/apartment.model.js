@@ -242,19 +242,29 @@ class ApartmentModel {
       a.cover_image_url,
       a.tenant_id,
 
-      tm.months_remaining,
-      tm.total_lease_months,
-      tm.next_rent_date,
-      tm.lease_start_date,
+      
+      tm.property_type,
+      tm.rent_amount,
+      tm.rent_currency,
+      tm.rent_frequency,
+      tm.tenancy_start_date,
+      tm.tenancy_end_date,
+      tm.is_active_tenant,
+      tm.has_paid_current_rent,
+      tm.notice_served,
+      tm.last_payment_date,
+      tm.next_due_date,
+      tm.outstanding_balance,
+      tm.tenancy_status
 
       u.id as tenant_id,
-      u.full_name as tenant_name,
-      u.phone as tenant_phone,
+      u.first_name as tenant_name,
+      u.phone_number as tenant_phone,
       u.email as tenant_email
 
     FROM apartments a
 
-    LEFT JOIN tenantsMetaData tm
+    LEFT JOIN tenant_meta tm
       ON tm.apartment_id = a.apartment_id
       AND tm.deleted_at IS NULL
 
