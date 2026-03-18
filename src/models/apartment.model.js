@@ -229,23 +229,23 @@ class ApartmentModel {
     return rows[0] || null;
   }
 
-  static async findByHouseId(houseId) {
-    console.log('model reached');
+static async findByHouseId(houseId) {
+  console.log('model reached');
+
   try {
     const { rows } = await pool.query(
       `
       SELECT
-        a.apartment_id,
+        a.id as apartment_id,
         a.house_id,
         a.unit_number,
         a.apartment_type,
-        a.rent_amount,
+        a.rent_amount as apartment_rent,
         a.cover_image_url,
-        a.tenant_id,
-  
-        
+        a.tenant_id as apartment_tenant_id,
+
         tm.property_type,
-        tm.rent_amount,
+        tm.rent_amount as meta_rent_amount,
         tm.rent_currency,
         tm.rent_frequency,
         tm.tenancy_start_date,
@@ -256,35 +256,41 @@ class ApartmentModel {
         tm.last_payment_date,
         tm.next_due_date,
         tm.outstanding_balance,
-        tm.tenancy_status
-  
+        tm.tenancy_status,
+
         u.id as tenant_id,
-        u.first_name as tenant_name,
-        u.phone_number as tenant_phone,
-        u.email as tenant_email
-  
+        u.first_name,
+        u.last_name,
+        u.phone_number,
+        u.email
+
       FROM apartments a
-  
+
       LEFT JOIN tenant_meta tm
-        ON tm.apartment_id = a.apartment_id
+        ON tm.property_id = a.id
+        AND tm.property_type = 'apartment'
         AND tm.deleted_at IS NULL
-  
+
       LEFT JOIN users u
         ON u.id = a.tenant_id
         AND u.deleted_at IS NULL
-  
+
       WHERE a.house_id = $1
       AND a.deleted_at IS NULL
-  
+
       ORDER BY a.created_at DESC
       `,
       [houseId]
     );
-      return rows;
+
+    console.log("✅ Rows fetched:", rows.length);
+
+    return rows;
+
   } catch (error) {
-    
+    console.error("❌ DB ERROR:", error.message);
+    throw error;
   }
-console.log(rows.length);
 }
 
   static async findAll({ page = 1, limit = 20, sortBy = "created_at", sortOrder = "desc" } = {}) {
