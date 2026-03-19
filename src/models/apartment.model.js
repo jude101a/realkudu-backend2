@@ -262,7 +262,22 @@ static async findByHouseId(houseId) {
         u.first_name,
         u.last_name,
         u.phone_number,
-        u.email
+        u.email,
+        u.address,
+      u.profile_image_url,
+      u.occupation,
+      u.position_at_work,
+      u.place_of_work,
+      u.local_government_area,
+      u.state,
+      u.country,
+      u.marital_status,
+      u.number_of_children,
+      u.hobbies,
+      u.role,
+      u.is_verified,
+      u.is_upgraded,
+      u.is_lawyer,
 
       FROM apartments a
 
