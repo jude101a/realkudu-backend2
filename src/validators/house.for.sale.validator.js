@@ -65,8 +65,8 @@ export const createHouseSchema = Joi.object({
   hasBuildingApproval: Joi.boolean().default(false),
   governorConsentObtained: Joi.boolean().default(false),
   description: Joi.string().trim().max(10000).allow(null, ""),
-  features: Joi.alternatives().try(Joi.array(), Joi.object(), Joi.string()).allow(null),
-  images: Joi.alternatives().try(Joi.array(), Joi.object()).allow(null),
+  features:   Joi.string(),
+  images: Joi.string(),
 });
 
 export const updatePriceSchema = Joi.object({
@@ -82,7 +82,7 @@ export const updateDescriptionSchema = Joi.object({
 });
 
 export const updateImagesSchema = Joi.object({
-  images: Joi.array().items(Joi.string().uri()).required(),
+  images: Joi.string(),
 });
 
 export const singleImageSchema = Joi.object({
