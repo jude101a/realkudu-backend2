@@ -189,7 +189,7 @@ async function createPropertyTables(client) {
       state VARCHAR(100),
       lga VARCHAR(100),
       is_single_house BOOLEAN DEFAULT FALSE,
-      house_description TEXT
+      house_description TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       deleted_at TIMESTAMPTZ
@@ -380,6 +380,17 @@ const STARTUP_SCHEMA_RECONCILIATION = Object.freeze({
 });
 
 async function ensureTableColumns(client, tableName, columns) {
+  const { rows } = await client.query(`SELECT to_regclass($1) AS existing_table`, [
+    tableName,
+  ]);
+
+  if (!rows[0]?.existing_table) {
+    console.log(
+      `[DB] startup schema reconciliation skipped missing table: ${tableName}`
+    );
+    return;
+  }
+
   for (const column of columns) {
     const parts = [
       `ALTER TABLE ${tableName}`,

@@ -1,0 +1,6 @@
+[dotenv@17.3.1] injecting env (16) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+✅ Database connection successful
+[DB] migration started
+[DB] extensions - completed
+[DB] _migration_history - completed
+[DB] images table hotfix - completed

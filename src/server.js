@@ -1,6 +1,6 @@
 import "./config/env.js";
 import app from "./app.js";
-import pool from "./config/db.js";
+import { ensureDatabaseConnectivity } from "./config/db.js";
 import { initializeDatabaseTablesSafe } from "./data/initDb.safe.js";
 import { transporter } from "./utils/email.js";
 
@@ -22,6 +22,11 @@ const formatDbError = (err) => {
   if (!err) return "Unknown database error";
 
   const code = err.code ? ` (code: ${err.code})` : "";
+  const message = err.message ?? "";
+
+  if (message.includes("Connection terminated unexpectedly")) {
+    return `Database connection terminated unexpectedly${code}. Verify DATABASE_URL/SSL settings or set DB_SSL explicitly for your database.`;
+  }
 
   switch (err.code) {
     case "ECONNREFUSED":
@@ -57,7 +62,7 @@ const start = async () => {
   try {
     validateStartupEnv();
 
-    await pool.query("SELECT 1");
+    await ensureDatabaseConnectivity();
     console.log("✅ Database connection successful");
 
     await initializeDatabaseTablesSafe();
