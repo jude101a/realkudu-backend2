@@ -6,6 +6,8 @@ const explicitDbSslSetting = process.env.DB_SSL?.trim().toLowerCase();
 const localDbHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 const internalHostSuffixes = [".internal", ".render.internal"];
 const externalRenderHostSuffix = ".render.com";
+const startupRetryRounds = Number(process.env.DB_STARTUP_RETRY_ROUNDS || 3);
+const startupRetryDelayMs = Number(process.env.DB_STARTUP_RETRY_DELAY_MS || 1500);
 
 function getRequiredConnectionString() {
   if (!process.env.DATABASE_URL) {
@@ -91,6 +93,27 @@ function getSslAttemptPlan() {
   return [true, false];
 }
 
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function describeSslMode(sslEnabled) {
+  return sslEnabled ? "enabled" : "disabled";
+}
+
+function getStartupDiagnostics() {
+  const hostname = getDatabaseHost();
+  const plan = getSslAttemptPlan().map(describeSslMode).join(" -> ");
+
+  return {
+    host: hostname || "<unknown-host>",
+    plan,
+    explicitDbSslSetting: explicitDbSslSetting || "<unset>",
+  };
+}
+
 function buildPool(sslEnabled) {
   const pool = new Pool({
     connectionString: getConnectionStringForSslMode(sslEnabled),
@@ -140,46 +163,79 @@ function getCurrentPool() {
   return currentPool;
 }
 
+async function tryConnectWithPool(candidatePool, sslEnabled) {
+  await candidatePool.query("SELECT 1");
+
+  if (candidatePool !== currentPool) {
+    if (currentPool) {
+      await currentPool.end().catch(() => {});
+    }
+    currentPool = candidatePool;
+  }
+
+  if (currentSslEnabled !== sslEnabled) {
+    console.warn(
+      `[DB] Switched startup connection to SSL ${describeSslMode(
+        sslEnabled
+      )} after the initial attempt failed.`
+    );
+  }
+
+  currentSslEnabled = sslEnabled;
+}
+
+async function trySslMode(sslEnabled, useCurrentPool = false) {
+  const candidatePool = useCurrentPool ? getCurrentPool() : buildPool(sslEnabled);
+
+  try {
+    await tryConnectWithPool(candidatePool, sslEnabled);
+    return null;
+  } catch (error) {
+    if (candidatePool !== currentPool) {
+      await candidatePool.end().catch(() => {});
+    }
+    return error;
+  }
+}
+
 export async function ensureDatabaseConnectivity() {
   const attempts = getSslAttemptPlan();
+  const diagnostics = getStartupDiagnostics();
   let lastError = null;
 
-  for (let index = 0; index < attempts.length; index += 1) {
-    const sslEnabled = attempts[index];
-    const candidatePool =
-      index === 0 ? getCurrentPool() : buildPool(sslEnabled);
-
-    try {
-      await candidatePool.query("SELECT 1");
-
-      if (candidatePool !== getCurrentPool()) {
-        await getCurrentPool().end().catch(() => {});
-        currentPool = candidatePool;
-      }
-
-      if (currentSslEnabled !== sslEnabled) {
-        console.warn(
-          `[DB] Switched startup connection to SSL ${
-            sslEnabled ? "enabled" : "disabled"
-          } after the initial attempt failed.`
-        );
-      }
-
-      currentSslEnabled = sslEnabled;
+  for (let round = 0; round < startupRetryRounds; round += 1) {
+    const primarySslEnabled = attempts[0];
+    const primaryError = await trySslMode(primarySslEnabled, round === 0);
+    if (!primaryError) {
       return;
-    } catch (error) {
-      lastError = error;
+    }
 
-      if (candidatePool !== currentPool) {
-        await candidatePool.end().catch(() => {});
+    lastError = primaryError;
+    console.warn(
+      `[DB] Startup connection attempt ${round + 1}/${startupRetryRounds} failed ` +
+        `(host=${diagnostics.host}, ssl=${describeSslMode(primarySslEnabled)}, code=${
+          primaryError.code || "n/a"
+        }): ${primaryError.message}`
+    );
+
+    if (attempts.length > 1 && shouldTryAlternateSsl(primaryError)) {
+      const alternateSslEnabled = attempts[1];
+      const alternateError = await trySslMode(alternateSslEnabled);
+      if (!alternateError) {
+        return;
       }
 
-      const hasAlternateAttempt = index < attempts.length - 1;
-      if (!hasAlternateAttempt || !shouldTryAlternateSsl(error)) {
-        throw error;
-      }
+      lastError = alternateError;
+      console.warn(
+        `[DB] Alternate SSL attempt ${round + 1}/${startupRetryRounds} failed ` +
+          `(host=${diagnostics.host}, ssl=${describeSslMode(
+            alternateSslEnabled
+          )}, code=${alternateError.code || "n/a"}): ${alternateError.message}`
+      );
+    }
 
-      continue;
+    if (round < startupRetryRounds - 1) {
+      await wait(startupRetryDelayMs * (round + 1));
     }
   }
 
