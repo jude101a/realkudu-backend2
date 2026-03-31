@@ -83,6 +83,38 @@ export async function ensureDatabaseConnectivity() {
   }
 }
 
+function shouldRetryWithAlternateSsl(error) {
+  if (explicitDbSslSetting === "true" || explicitDbSslSetting === "false") {
+    return false;
+  }
+
+  const message =
+    typeof error?.message === "string"
+      ? error.message.toLowerCase()
+      : String(error ?? "").toLowerCase();
+
+  const retryTriggers = [
+    "ssl",
+    "tls",
+    "certificate",
+    "self signed",
+    "server does not support ssl",
+    "ssl connection is required",
+    "unsupported frontend protocol",
+    "connection terminated unexpectedly",
+    "unexpected message",
+    "tls handshake",
+    "certificate verify failed",
+    "server certificate verification failed",
+    "sslmode",
+    "ssl handshake",
+  ];
+
+  return retryTriggers.some((trigger) => message.includes(trigger));
+}
+
+
+
 const pool = {
   query: (...args) => currentPool.query(...args),
   connect: (...args) => currentPool.connect(...args),
