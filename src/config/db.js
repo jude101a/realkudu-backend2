@@ -130,7 +130,15 @@ function shouldTryAlternateSsl(err) {
 }
 
 let currentSslEnabled = getSslAttemptPlan()[0];
-let currentPool = buildPool(currentSslEnabled);
+let currentPool = null;
+
+function getCurrentPool() {
+  if (!currentPool) {
+    currentPool = buildPool(currentSslEnabled);
+  }
+
+  return currentPool;
+}
 
 export async function ensureDatabaseConnectivity() {
   const attempts = getSslAttemptPlan();
@@ -139,13 +147,13 @@ export async function ensureDatabaseConnectivity() {
   for (let index = 0; index < attempts.length; index += 1) {
     const sslEnabled = attempts[index];
     const candidatePool =
-      index === 0 ? currentPool : buildPool(sslEnabled);
+      index === 0 ? getCurrentPool() : buildPool(sslEnabled);
 
     try {
       await candidatePool.query("SELECT 1");
 
-      if (candidatePool !== currentPool) {
-        await currentPool.end().catch(() => {});
+      if (candidatePool !== getCurrentPool()) {
+        await getCurrentPool().end().catch(() => {});
         currentPool = candidatePool;
       }
 
@@ -179,10 +187,10 @@ export async function ensureDatabaseConnectivity() {
 }
 
 const pool = {
-  query: (...args) => currentPool.query(...args),
-  connect: (...args) => currentPool.connect(...args),
-  end: (...args) => currentPool.end(...args),
-  on: (...args) => currentPool.on(...args),
+  query: (...args) => getCurrentPool().query(...args),
+  connect: (...args) => getCurrentPool().connect(...args),
+  end: (...args) => getCurrentPool().end(...args),
+  on: (...args) => getCurrentPool().on(...args),
 };
 
 export default pool;
