@@ -1,6 +1,12 @@
 import dotenv from "dotenv";
 
-dotenv.config();
+const hasRuntimeConfig = Boolean(
+  process.env.DATABASE_URL && process.env.JWT_SECRET
+);
+
+if (!hasRuntimeConfig) {
+  dotenv.config({ quiet: true });
+}
 
 export const env = {
   PORT: process.env.PORT || 5000,

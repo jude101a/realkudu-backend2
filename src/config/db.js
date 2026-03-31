@@ -4,6 +4,16 @@ const dbSslRejectUnauthorized =
   process.env.DB_SSL_REJECT_UNAUTHORIZED === "true";
 const explicitDbSslSetting = process.env.DB_SSL?.trim().toLowerCase();
 
+function getConnectionStringWithoutSslMode() {
+  try {
+    const url = new URL(process.env.DATABASE_URL ?? "");
+    url.searchParams.delete("sslmode");
+    return url.toString();
+  } catch {
+    return process.env.DATABASE_URL;
+  }
+}
+
 function resolveInitialSslEnabled() {
   if (explicitDbSslSetting === "true") return true;
   if (explicitDbSslSetting === "false") return false;
@@ -25,7 +35,7 @@ function resolveInitialSslEnabled() {
 
 function buildPool(sslEnabled) {
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: getConnectionStringWithoutSslMode(),
     ssl: sslEnabled
       ? { rejectUnauthorized: dbSslRejectUnauthorized }
       : false,
