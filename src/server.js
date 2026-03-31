@@ -28,6 +28,13 @@ const formatDbError = (err) => {
     return `Database connection terminated unexpectedly${code}. Verify DATABASE_URL/SSL settings or set DB_SSL explicitly for your database.`;
   }
 
+  if (
+    message.includes("SSL/TLS required") ||
+    message.includes("SSL required")
+  ) {
+    return `Database rejected a non-SSL connection${code}. The app will retry with SSL automatically; if this persists, remove DB_SSL=false from Render or set DB_SSL=true.`;
+  }
+
   switch (err.code) {
     case "ECONNREFUSED":
       return `Database connection refused${code}. Check DATABASE_URL host/port and ensure PostgreSQL is running.`;

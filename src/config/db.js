@@ -39,15 +39,17 @@ function buildPool(sslEnabled) {
 }
 
 function shouldRetryWithAlternateSsl(err) {
-  if (explicitDbSslSetting === "true" || explicitDbSslSetting === "false") {
-    return false;
-  }
-
   const message = err?.message?.toLowerCase() ?? "";
+  const code = err?.code?.toLowerCase?.() ?? "";
+
   return (
+    message.includes("ssl/tls required") ||
+    message.includes("ssl required") ||
     message.includes("connection terminated unexpectedly") ||
     message.includes("the server does not support ssl connections") ||
-    message.includes("ssl is not enabled on the server")
+    message.includes("ssl is not enabled on the server") ||
+    message.includes("no pg_hba.conf entry") ||
+    (code === "28000" && message.includes("ssl"))
   );
 }
 
@@ -74,7 +76,9 @@ export async function ensureDatabaseConnectivity() {
       console.warn(
         `[DB] Retried startup connection with SSL ${
           retrySslEnabled ? "enabled" : "disabled"
-        } after initial handshake failure.`
+        } after startup rejected the initial SSL mode${
+          explicitDbSslSetting ? ` (DB_SSL=${explicitDbSslSetting})` : ""
+        }.`
       );
       return;
     } catch (retryError) {
