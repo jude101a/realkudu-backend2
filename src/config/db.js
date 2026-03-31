@@ -4,6 +4,8 @@ const dbSslRejectUnauthorized =
   process.env.DB_SSL_REJECT_UNAUTHORIZED === "true";
 const explicitDbSslSetting = process.env.DB_SSL?.trim().toLowerCase();
 const localDbHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+const internalHostSuffixes = [".internal", ".render.internal"];
+const externalRenderHostSuffix = ".render.com";
 
 function getRequiredConnectionString() {
   if (!process.env.DATABASE_URL) {
@@ -23,43 +25,79 @@ function parseDatabaseUrl() {
   }
 }
 
-function getConnectionStringWithoutSslMode() {
+function getDatabaseHost() {
+  return parseDatabaseUrl()?.hostname?.toLowerCase?.() ?? "";
+}
+
+function isLocalHost(hostname) {
+  return localDbHosts.has(hostname);
+}
+
+function isRenderExternalHost(hostname) {
+  return hostname.endsWith(externalRenderHostSuffix);
+}
+
+function isInternalHost(hostname) {
+  return (
+    internalHostSuffixes.some((suffix) => hostname.endsWith(suffix)) ||
+    (process.env.RENDER === "true" &&
+      hostname.length > 0 &&
+      !hostname.includes(".") &&
+      !isLocalHost(hostname))
+  );
+}
+
+function getConnectionStringForSslMode(sslEnabled) {
   const parsedUrl = parseDatabaseUrl();
   if (!parsedUrl) {
     return getRequiredConnectionString();
   }
 
+  parsedUrl.searchParams.delete("ssl");
   parsedUrl.searchParams.delete("sslmode");
+  parsedUrl.searchParams.delete("sslcert");
+  parsedUrl.searchParams.delete("sslkey");
+  parsedUrl.searchParams.delete("sslrootcert");
+  parsedUrl.searchParams.set(
+    "sslmode",
+    sslEnabled
+      ? dbSslRejectUnauthorized
+        ? "verify-full"
+        : "no-verify"
+      : "disable"
+  );
   return parsedUrl.toString();
 }
 
-function resolveInitialSslEnabled() {
-  if (explicitDbSslSetting === "true") return true;
-  if (explicitDbSslSetting === "false") return false;
+function getSslAttemptPlan() {
+  const hostname = getDatabaseHost();
 
-  const parsedUrl = parseDatabaseUrl();
-  if (!parsedUrl) {
-    return true;
+  if (explicitDbSslSetting === "true") {
+    return [true, false];
   }
 
-  const sslMode = parsedUrl.searchParams.get("sslmode")?.toLowerCase();
-  if (sslMode === "disable") return false;
-  if (["require", "verify-ca", "verify-full"].includes(sslMode)) {
-    return true;
+  if (explicitDbSslSetting === "false") {
+    return [false, true];
   }
 
-  if (localDbHosts.has(parsedUrl.hostname?.toLowerCase?.() ?? "")) {
-    return false;
+  if (isLocalHost(hostname) || isInternalHost(hostname)) {
+    return [false, true];
   }
 
-  return true;
+  if (isRenderExternalHost(hostname)) {
+    return [true, false];
+  }
+
+  return [true, false];
 }
 
 function buildPool(sslEnabled) {
   const pool = new Pool({
-    connectionString: getConnectionStringWithoutSslMode(),
+    connectionString: getConnectionStringForSslMode(sslEnabled),
     ssl: sslEnabled
-      ? { rejectUnauthorized: dbSslRejectUnauthorized }
+      ? {
+          rejectUnauthorized: dbSslRejectUnauthorized,
+        }
       : false,
     max: Number(process.env.DB_POOL_MAX || 10),
     idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
@@ -75,13 +113,13 @@ function buildPool(sslEnabled) {
   return pool;
 }
 
-function shouldRetryWithAlternateSsl(err) {
-  const message = err?.message?.toLowerCase() ?? "";
+function shouldTryAlternateSsl(err) {
+  const message = err?.message?.toLowerCase?.() ?? "";
   const code = err?.code?.toLowerCase?.() ?? "";
 
   return (
+    code === "28000" ||
     code === "econnreset" ||
-    (code === "28000" && message.includes("ssl")) ||
     message.includes("ssl/tls required") ||
     message.includes("ssl required") ||
     message.includes("connection terminated unexpectedly") ||
@@ -91,38 +129,53 @@ function shouldRetryWithAlternateSsl(err) {
   );
 }
 
-let currentSslEnabled = resolveInitialSslEnabled();
+let currentSslEnabled = getSslAttemptPlan()[0];
 let currentPool = buildPool(currentSslEnabled);
 
 export async function ensureDatabaseConnectivity() {
-  try {
-    await currentPool.query("SELECT 1");
-    return;
-  } catch (initialError) {
-    if (!shouldRetryWithAlternateSsl(initialError)) {
-      throw initialError;
-    }
+  const attempts = getSslAttemptPlan();
+  let lastError = null;
 
-    const retrySslEnabled = !currentSslEnabled;
-    const retryPool = buildPool(retrySslEnabled);
+  for (let index = 0; index < attempts.length; index += 1) {
+    const sslEnabled = attempts[index];
+    const candidatePool =
+      index === 0 ? currentPool : buildPool(sslEnabled);
 
     try {
-      await retryPool.query("SELECT 1");
-      await currentPool.end().catch(() => {});
-      currentPool = retryPool;
-      currentSslEnabled = retrySslEnabled;
-      console.warn(
-        `[DB] Retried startup connection with SSL ${
-          retrySslEnabled ? "enabled" : "disabled"
-        } after startup rejected the initial SSL mode${
-          explicitDbSslSetting ? ` (DB_SSL=${explicitDbSslSetting})` : ""
-        }.`
-      );
-    } catch (retryError) {
-      await retryPool.end().catch(() => {});
-      throw retryError;
+      await candidatePool.query("SELECT 1");
+
+      if (candidatePool !== currentPool) {
+        await currentPool.end().catch(() => {});
+        currentPool = candidatePool;
+      }
+
+      if (currentSslEnabled !== sslEnabled) {
+        console.warn(
+          `[DB] Switched startup connection to SSL ${
+            sslEnabled ? "enabled" : "disabled"
+          } after the initial attempt failed.`
+        );
+      }
+
+      currentSslEnabled = sslEnabled;
+      return;
+    } catch (error) {
+      lastError = error;
+
+      if (candidatePool !== currentPool) {
+        await candidatePool.end().catch(() => {});
+      }
+
+      const hasAlternateAttempt = index < attempts.length - 1;
+      if (!hasAlternateAttempt || !shouldTryAlternateSsl(error)) {
+        throw error;
+      }
+
+      continue;
     }
   }
+
+  throw lastError;
 }
 
 const pool = {
