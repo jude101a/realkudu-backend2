@@ -35,9 +35,9 @@ function resolveInitialSslEnabled() {
 
 function buildPool(sslEnabled) {
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: getConnectionStringWithoutSslMode(),
     ssl: sslEnabled
-      ? { rejectUnauthorized: false }
+      ? { rejectUnauthorized: dbSslRejectUnauthorized }
       : false,
   });
 
@@ -48,22 +48,7 @@ function buildPool(sslEnabled) {
   return pool;
 }
 
-function shouldRetryWithAlternateSsl(err) {
-  const message = err?.message?.toLowerCase() ?? "";
-  const code = err?.code?.toLowerCase?.() ?? "";
-
-  return (
-    message.includes("ssl/tls required") ||
-    message.includes("ssl required") ||
-    message.includes("connection terminated unexpectedly") ||
-    message.includes("the server does not support ssl connections") ||
-    message.includes("ssl is not enabled on the server") ||
-    message.includes("no pg_hba.conf entry") ||
-    (code === "28000" && message.includes("ssl"))
-  );
-}
-
-let currentSslEnabled = false;
+let currentSslEnabled = resolveInitialSslEnabled();
 let currentPool = buildPool(currentSslEnabled);
 
 export async function ensureDatabaseConnectivity() {
