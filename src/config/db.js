@@ -35,9 +35,9 @@ function resolveInitialSslEnabled() {
 
 function buildPool(sslEnabled) {
   const pool = new Pool({
-    connectionString: getConnectionStringWithoutSslMode(),
+    connectionString: process.env.DATABASE_URL,
     ssl: sslEnabled
-      ? { rejectUnauthorized: dbSslRejectUnauthorized }
+      ? { rejectUnauthorized: false }
       : false,
   });
 
@@ -63,7 +63,7 @@ function shouldRetryWithAlternateSsl(err) {
   );
 }
 
-let currentSslEnabled = resolveInitialSslEnabled();
+let currentSslEnabled = false;
 let currentPool = buildPool(currentSslEnabled);
 
 export async function ensureDatabaseConnectivity() {
