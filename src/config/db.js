@@ -1,18 +1,13 @@
 import { Pool } from "pg";
+const dbSslRejectUnauthorized = 'true';
 
-const dbSslRejectUnauthorized =
-  process.env.DB_SSL_REJECT_UNAUTHORIZED === "true";
-const explicitDbSslSetting = process.env.DB_SSL?.trim().toLowerCase();
+const explicitDbSslSetting = 'true'
 const localDbHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 const internalHostSuffixes = [".internal", ".render.internal"];
 const externalRenderHostSuffix = ".render.com";
-const startupRetryRounds = Number(process.env.DB_STARTUP_RETRY_ROUNDS || 3);
-const startupRetryDelayMs = Number(process.env.DB_STARTUP_RETRY_DELAY_MS || 1500);
-const internalConnectionStringEnvNames = [
-  "DATABASE_INTERNAL_URL",
-  "INTERNAL_DATABASE_URL",
-];
-
+const startupRetryRounds = 3;
+const startupRetryDelayMs = 1500;
+const internalConnectionStringEnvNames = 'postgresql://oortcloud:S2OerCPLdS7KRgDDWLF4u3kRZMEh6pww@dpg-d75s3sq4d50c73cmapvg-a.virginia-postgres.render.com/real_kudu_db_cwcs'
 function getRequiredConnectionString() {
   if (!process.env.DATABASE_URL) {
     const error = new Error("DATABASE_URL is missing");
@@ -25,7 +20,7 @@ function getRequiredConnectionString() {
 
 function parseDatabaseUrl() {
   try {
-    return new URL(getRequiredConnectionString());
+    return new URL('postgresql://oortcloud:S2OerCPLdS7KRgDDWLF4u3kRZMEh6pww@dpg-d75s3sq4d50c73cmapvg-a.virginia-postgres.render.com/real_kudu_db_cwcs');
   } catch {
     return null;
   }
@@ -175,11 +170,9 @@ function buildPool(connectionString, sslEnabled) {
           rejectUnauthorized: dbSslRejectUnauthorized,
         }
       : false,
-    max: Number(process.env.DB_POOL_MAX || 10),
-    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
-    connectionTimeoutMillis: Number(
-      process.env.DB_CONNECTION_TIMEOUT_MS || 10000
-    ),
+    max: 10,
+    idleTimeoutMillis: 3000,
+    connectionTimeoutMillis: 10000,
   });
 
   pool.on("error", (err) => {
@@ -197,7 +190,7 @@ function getConnectionCandidates() {
   const candidates = [];
   const seen = new Set();
   const connectionStrings = [
-    getConfiguredInternalConnectionString(),
+   internalConnectionStringEnvNames,
     deriveInternalConnectionStringFromRenderExternal(),
     getRequiredConnectionString(),
   ].filter(Boolean);
