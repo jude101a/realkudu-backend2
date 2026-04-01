@@ -289,8 +289,8 @@ async function createPropertyTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS houses_for_sale (
       house_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      owner_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
+      agent_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
       lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
       buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
       status TEXT NOT NULL,
