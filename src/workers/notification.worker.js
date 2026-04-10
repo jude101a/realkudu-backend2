@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { redis } from "../config/redis.js";
+import { redisConnectionOptions } from "../config/redis.js";
 import { sendPushNotification } from "../services/push.service.js";
 import { saveNotification } from "../services/notification.service.js";
 
@@ -19,5 +19,5 @@ new Worker(
     // 2. Send Push Notification
     await sendPushNotification(userId, title, body, data);
   },
-  { connection: redis }
+  { connection: redisConnectionOptions }
 );
