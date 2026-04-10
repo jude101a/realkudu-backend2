@@ -32,6 +32,7 @@ import {
   updateTermsAcceptance,
   verifySeller,
 } from "../controllers/seller.controller.js";
+import { getSellerPropertyListings } from "../controllers/seller.property.listing.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -47,6 +48,7 @@ import {
   registerIndividualSellerSchema,
   sellerIdParamSchema,
   sellerListQuerySchema,
+  sellerPropertyListingQuerySchema,
   sellerSearchQuerySchema,
   sellerUserLoginSchema,
   updateBusinessProfileSchema,
@@ -65,6 +67,11 @@ router.get("/", validate({ query: sellerListQuerySchema }), getAllSellers);
 router.get("/search", validate({ query: sellerSearchQuerySchema }), searchSellers);
 router.get("/verified", getVerifiedSellers);
 router.get("/top-rated", getTopRatedSellers);
+router.get(
+  "/:id/properties",
+  validate({ params: sellerIdParamSchema, query: sellerPropertyListingQuerySchema }),
+  getSellerPropertyListings
+);
 router.get("/:id", validate({ params: sellerIdParamSchema }), getSeller);
 router.post("/login/:id", loginSeller);
 

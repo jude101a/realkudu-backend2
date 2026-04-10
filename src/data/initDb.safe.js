@@ -3,6 +3,79 @@ import pool from "../config/db.js";
 const MIGRATION_NAME = "bootstrap_schema_v1";
 const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v1";
 
+const HOUSES_FOR_SALE_STARTUP_COLUMNS = Object.freeze([
+  { name: "owner_id", typeSql: "UUID" },
+  { name: "agent_id", typeSql: "UUID" },
+  { name: "lawyer_id", typeSql: "UUID" },
+  { name: "buyer_id", typeSql: "UUID" },
+  { name: "status", typeSql: "TEXT" },
+  { name: "verification_status", typeSql: "TEXT" },
+  { name: "state", typeSql: "TEXT" },
+  { name: "lga", typeSql: "TEXT" },
+  { name: "address", typeSql: "TEXT" },
+  { name: "landmark", typeSql: "TEXT" },
+  { name: "latitude", typeSql: "NUMERIC" },
+  { name: "longitude", typeSql: "NUMERIC" },
+  { name: "bedrooms", typeSql: "INTEGER" },
+  { name: "bathrooms", typeSql: "INTEGER" },
+  { name: "toilets", typeSql: "INTEGER" },
+  { name: "floors", typeSql: "INTEGER" },
+  { name: "land_size", typeSql: "NUMERIC" },
+  { name: "house_type", typeSql: "TEXT" },
+  { name: "asking_price", typeSql: "NUMERIC(14,2)" },
+  { name: "final_sale_price", typeSql: "NUMERIC(14,2)" },
+  { name: "currency", typeSql: "TEXT", defaultSql: "'NGN'" },
+  { name: "title_document", typeSql: "TEXT" },
+  { name: "has_survey_plan", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "has_building_approval", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  {
+    name: "governor_consent_obtained",
+    typeSql: "BOOLEAN",
+    defaultSql: "FALSE",
+  },
+  { name: "description", typeSql: "TEXT" },
+  { name: "features", typeSql: "TEXT" },
+  { name: "images", typeSql: "TEXT" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "sold_at", typeSql: "TIMESTAMPTZ" },
+]);
+
+const PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS = Object.freeze([
+  { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
+  { name: "buyer_id", typeSql: "UUID" },
+  { name: "property_id", typeSql: "UUID" },
+  { name: "inspection_date", typeSql: "DATE" },
+  { name: "inspection_time", typeSql: "TIME" },
+  { name: "inspection_additional_notes", typeSql: "TEXT" },
+  { name: "inspection_meeting_point", typeSql: "TEXT" },
+  { name: "inspection_status", typeSql: "VARCHAR(30)", defaultSql: "'pending'" },
+  { name: "request_payment_date", typeSql: "DATE" },
+  { name: "request_payment_additional_notes", typeSql: "TEXT" },
+  { name: "payment_status", typeSql: "VARCHAR(30)", defaultSql: "'pending'" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const PURCHASE_PROCESS_CONTRACT_UPLOAD_COLUMNS = Object.freeze([
+  { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
+  { name: "buyer_id", typeSql: "UUID" },
+  { name: "property_id", typeSql: "UUID" },
+  { name: "contract_signing_date", typeSql: "DATE" },
+  { name: "contract_signing_time", typeSql: "TIME" },
+  { name: "contract_signing_meeting_point", typeSql: "TEXT" },
+  { name: "contract_signing_additional_notes", typeSql: "TEXT" },
+  {
+    name: "contract_signing_status",
+    typeSql: "VARCHAR(30)",
+    defaultSql: "'pending'",
+  },
+  { name: "document_upload_date", typeSql: "DATE" },
+  { name: "process_completion", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
 async function runStep(client, name, fn) {
   try {
     await fn();
@@ -56,6 +129,367 @@ async function alreadyApplied(client) {
   );
 
   return rows.length > 0;
+}
+
+async function doesTableExist(client, tableName) {
+  const { rows } = await client.query(`SELECT to_regclass($1) AS existing_table`, [
+    tableName,
+  ]);
+
+  return Boolean(rows[0]?.existing_table);
+}
+
+async function ensureSetUpdatedAtFunction(client) {
+  await client.query(`
+    CREATE OR REPLACE FUNCTION set_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at = NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+}
+
+async function ensureUpdatedAtTriggerForTable(client, tableName) {
+  await ensureSetUpdatedAtFunction(client);
+  await client.query(`
+    DROP TRIGGER IF EXISTS trg_${tableName}_updated_at ON ${tableName};
+    CREATE TRIGGER trg_${tableName}_updated_at
+    BEFORE UPDATE ON ${tableName}
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+  `);
+}
+
+async function createHousesForSaleTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS houses_for_sale (
+      house_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
+      agent_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
+      lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
+      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      status TEXT NOT NULL,
+      verification_status TEXT NOT NULL,
+      state TEXT NOT NULL,
+      lga TEXT NOT NULL,
+      address TEXT NOT NULL,
+      landmark TEXT,
+      latitude NUMERIC,
+      longitude NUMERIC,
+      bedrooms INTEGER,
+      bathrooms INTEGER,
+      toilets INTEGER,
+      floors INTEGER,
+      land_size NUMERIC,
+      house_type TEXT,
+      asking_price NUMERIC(14,2) NOT NULL CHECK (asking_price >= 0),
+      final_sale_price NUMERIC(14,2) CHECK (final_sale_price >= 0),
+      currency TEXT DEFAULT 'NGN',
+      title_document TEXT NOT NULL,
+      has_survey_plan BOOLEAN DEFAULT FALSE,
+      has_building_approval BOOLEAN DEFAULT FALSE,
+      governor_consent_obtained BOOLEAN DEFAULT FALSE,
+      description TEXT,
+      features TEXT,
+      images TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      sold_at TIMESTAMPTZ,
+      CONSTRAINT chk_hfs_status CHECK (status IN ('active','under_offer','sold','withdrawn')),
+      CONSTRAINT chk_hfs_verification CHECK (verification_status IN ('pending','verified','rejected'))
+    );
+  `);
+}
+
+async function createPurchaseProcessTables(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS purchase_process_inspection_payments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      buyer_id UUID,
+      property_id UUID NOT NULL,
+      inspection_date DATE,
+      inspection_time TIME,
+      inspection_additional_notes TEXT,
+      inspection_meeting_point TEXT,
+      inspection_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      request_payment_date DATE,
+      request_payment_additional_notes TEXT,
+      payment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT chk_purchase_process_inspection_status
+        CHECK (inspection_status IN ('pending','requested','confirmed','cancelled')),
+      CONSTRAINT chk_purchase_process_payment_status
+        CHECK (payment_status IN ('pending','requested','paid','cancelled'))
+    );
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS purchase_process_contract_uploads (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      buyer_id UUID,
+      property_id UUID NOT NULL,
+      contract_signing_date DATE,
+      contract_signing_time TIME,
+      contract_signing_meeting_point TEXT,
+      contract_signing_additional_notes TEXT,
+      contract_signing_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      document_upload_date DATE,
+      process_completion BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT chk_purchase_process_contract_status
+        CHECK (contract_signing_status IN ('pending','requested','confirmed','cancelled'))
+    );
+  `);
+}
+
+async function getForeignKeyConstraints(client, tableName, columnName) {
+  const { rows } = await client.query(
+    `
+      SELECT DISTINCT c.conname, pg_get_constraintdef(c.oid) AS definition
+      FROM pg_constraint c
+      JOIN pg_attribute a
+        ON a.attrelid = c.conrelid
+       AND a.attnum = ANY (c.conkey)
+      WHERE c.contype = 'f'
+        AND c.conrelid = to_regclass($1)
+        AND a.attname = $2
+    `,
+    [tableName, columnName]
+  );
+
+  return rows;
+}
+
+async function ensureForeignKeyConstraint(
+  client,
+  tableName,
+  columnName,
+  constraintName,
+  definitionSql,
+  matcher
+) {
+  const existing = await getForeignKeyConstraints(client, tableName, columnName);
+  const desired = existing.find((constraint) => matcher(constraint.definition));
+
+  if (desired) {
+    for (const constraint of existing) {
+      if (constraint.conname === desired.conname) continue;
+      await client.query(
+        `ALTER TABLE ${tableName} DROP CONSTRAINT IF EXISTS ${constraint.conname}`
+      );
+    }
+    return;
+  }
+
+  for (const constraint of existing) {
+    await client.query(
+      `ALTER TABLE ${tableName} DROP CONSTRAINT IF EXISTS ${constraint.conname}`
+    );
+  }
+
+  await client.query(
+    `ALTER TABLE ${tableName} ADD CONSTRAINT ${constraintName} ${definitionSql}`
+  );
+}
+
+async function ensureHousesForSaleSellerReferences(client) {
+  await client.query(`
+    UPDATE houses_for_sale h
+    SET owner_id = s.id
+    FROM sellers s
+    WHERE h.owner_id = s.user_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sellers existing
+        WHERE existing.id = h.owner_id
+      );
+  `);
+
+  await client.query(`
+    UPDATE houses_for_sale h
+    SET agent_id = s.id
+    FROM sellers s
+    WHERE h.agent_id IS NOT NULL
+      AND h.agent_id = s.user_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sellers existing
+        WHERE existing.id = h.agent_id
+      );
+  `);
+
+  await client.query(`
+    UPDATE houses_for_sale h
+    SET agent_id = NULL
+    WHERE h.agent_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM sellers s
+        WHERE s.id = h.agent_id
+      );
+  `);
+
+  const { rows } = await client.query(`
+    SELECT house_id, owner_id
+    FROM houses_for_sale h
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM sellers s
+      WHERE s.id = h.owner_id
+    )
+    LIMIT 5
+  `);
+
+  if (rows.length) {
+    const sample = rows.map((row) => `${row.house_id}:${row.owner_id}`).join(", ");
+    throw new Error(
+      `houses_for_sale.owner_id contains values that do not map to sellers.id. Sample rows: ${sample}`
+    );
+  }
+}
+
+async function ensureHousesForSaleForeignKeys(client) {
+  await ensureHousesForSaleSellerReferences(client);
+
+  await ensureForeignKeyConstraint(
+    client,
+    "houses_for_sale",
+    "owner_id",
+    "fk_houses_for_sale_owner_id_sellers",
+    `FOREIGN KEY (owner_id) REFERENCES sellers(id) ON DELETE CASCADE`,
+    (definition) => {
+      const normalized = String(definition || "").toLowerCase();
+      return (
+        normalized.includes("foreign key (owner_id)") &&
+        normalized.includes("references sellers(id)") &&
+        normalized.includes("on delete cascade")
+      );
+    }
+  );
+
+  await ensureForeignKeyConstraint(
+    client,
+    "houses_for_sale",
+    "agent_id",
+    "fk_houses_for_sale_agent_id_sellers",
+    `FOREIGN KEY (agent_id) REFERENCES sellers(id) ON DELETE SET NULL`,
+    (definition) => {
+      const normalized = String(definition || "").toLowerCase();
+      return (
+        normalized.includes("foreign key (agent_id)") &&
+        normalized.includes("references sellers(id)") &&
+        normalized.includes("on delete set null")
+      );
+    }
+  );
+}
+
+async function ensureHousesForSaleIndexes(client) {
+  const statements = [
+    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_owner_id ON houses_for_sale(owner_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_status ON houses_for_sale(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_verification_status ON houses_for_sale(verification_status)`,
+    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_state ON houses_for_sale(state)`,
+  ];
+
+  for (const statement of statements) {
+    await client.query(statement);
+  }
+}
+
+async function ensureHousesForSaleTableHotfix(client) {
+  await createHousesForSaleTable(client);
+  await ensureTableColumns(
+    client,
+    "houses_for_sale",
+    HOUSES_FOR_SALE_STARTUP_COLUMNS
+  );
+  await ensureHousesForSaleForeignKeys(client);
+  await ensureUpdatedAtTriggerForTable(client, "houses_for_sale");
+  await ensureHousesForSaleIndexes(client);
+}
+
+async function ensurePurchaseProcessIndexes(client) {
+  const statements = [
+    `DROP INDEX IF EXISTS idx_purchase_process_inspection_payments_property_buyer`,
+    `DROP INDEX IF EXISTS idx_purchase_process_contract_uploads_property_buyer`,
+    `DROP INDEX IF EXISTS idx_purchase_process_inspection_payments_property_id`,
+    `DROP INDEX IF EXISTS idx_purchase_process_contract_uploads_property_id`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_process_inspection_payments_property_buyer ON purchase_process_inspection_payments(property_id, buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_inspection_payments_property_id ON purchase_process_inspection_payments(property_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_inspection_payments_buyer_id ON purchase_process_inspection_payments(buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_inspection_status ON purchase_process_inspection_payments(inspection_status)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_payment_status ON purchase_process_inspection_payments(payment_status)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_property_buyer ON purchase_process_contract_uploads(property_id, buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_property_id ON purchase_process_contract_uploads(property_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_buyer_id ON purchase_process_contract_uploads(buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_status ON purchase_process_contract_uploads(contract_signing_status)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_completion ON purchase_process_contract_uploads(process_completion)`,
+  ];
+
+  for (const statement of statements) {
+    await client.query(statement);
+  }
+}
+
+async function ensurePurchaseProcessBuyerForeignKeys(client) {
+  if (!(await doesTableExist(client, "users"))) {
+    return;
+  }
+
+  await ensureForeignKeyConstraint(
+    client,
+    "purchase_process_inspection_payments",
+    "buyer_id",
+    "fk_purchase_process_inspection_payments_buyer_id_users",
+    `FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE`,
+    (definition) => {
+      const normalized = String(definition || "").toLowerCase();
+      return (
+        normalized.includes("foreign key (buyer_id)") &&
+        normalized.includes("references users(id)") &&
+        normalized.includes("on delete cascade")
+      );
+    }
+  );
+
+  await ensureForeignKeyConstraint(
+    client,
+    "purchase_process_contract_uploads",
+    "buyer_id",
+    "fk_purchase_process_contract_uploads_buyer_id_users",
+    `FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE`,
+    (definition) => {
+      const normalized = String(definition || "").toLowerCase();
+      return (
+        normalized.includes("foreign key (buyer_id)") &&
+        normalized.includes("references users(id)") &&
+        normalized.includes("on delete cascade")
+      );
+    }
+  );
+}
+
+async function ensurePurchaseProcessTablesHotfix(client) {
+  await createPurchaseProcessTables(client);
+  await ensureTableColumns(
+    client,
+    "purchase_process_inspection_payments",
+    PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS
+  );
+  await ensureTableColumns(
+    client,
+    "purchase_process_contract_uploads",
+    PURCHASE_PROCESS_CONTRACT_UPLOAD_COLUMNS
+  );
+  await ensurePurchaseProcessBuyerForeignKeys(client);
+  await ensureUpdatedAtTriggerForTable(client, "purchase_process_inspection_payments");
+  await ensureUpdatedAtTriggerForTable(client, "purchase_process_contract_uploads");
+  await ensurePurchaseProcessIndexes(client);
 }
 
 async function createCoreTables(client) {
@@ -286,44 +720,7 @@ async function createPropertyTables(client) {
     );
   `);
 
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS houses_for_sale (
-      house_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      owner_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
-      agent_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
-      lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
-      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      status TEXT NOT NULL,
-      verification_status TEXT NOT NULL,
-      state TEXT NOT NULL,
-      lga TEXT NOT NULL,
-      address TEXT NOT NULL,
-      landmark TEXT,
-      latitude NUMERIC,
-      longitude NUMERIC,
-      bedrooms INTEGER,
-      bathrooms INTEGER,
-      toilets INTEGER,
-      floors INTEGER,
-      land_size NUMERIC,
-      house_type TEXT,
-      asking_price NUMERIC(14,2) NOT NULL CHECK (asking_price >= 0),
-      final_sale_price NUMERIC(14,2) CHECK (final_sale_price >= 0),
-      currency TEXT DEFAULT 'NGN',
-      title_document TEXT NOT NULL,
-      has_survey_plan BOOLEAN DEFAULT FALSE,
-      has_building_approval BOOLEAN DEFAULT FALSE,
-      governor_consent_obtained BOOLEAN DEFAULT FALSE,
-      description TEXT,
-      features TEXT,
-      images TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      sold_at TIMESTAMPTZ,
-      CONSTRAINT chk_hfs_status CHECK (status IN ('active','under_offer','sold','withdrawn')),
-      CONSTRAINT chk_hfs_verification CHECK (verification_status IN ('pending','verified','rejected'))
-    );
-  `);
+  await createHousesForSaleTable(client);
 }
 
 async function ensureImagesTableHotfix(client) {
@@ -339,23 +736,7 @@ async function ensureImagesTableHotfix(client) {
     );
   `);
 
-  await client.query(`
-    CREATE OR REPLACE FUNCTION set_updated_at()
-    RETURNS TRIGGER AS $$
-    BEGIN
-      NEW.updated_at = NOW();
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-  `);
-
-  await client.query(`
-    DROP TRIGGER IF EXISTS trg_images_updated_at ON images;
-    CREATE TRIGGER trg_images_updated_at
-    BEFORE UPDATE ON images
-    FOR EACH ROW
-    EXECUTE FUNCTION set_updated_at();
-  `);
+  await ensureUpdatedAtTriggerForTable(client, "images");
 
   await client.query(`CREATE INDEX IF NOT EXISTS idx_images_property_id ON images(property_id)`);
   await client.query(`CREATE INDEX IF NOT EXISTS idx_images_deleted_at ON images(deleted_at)`);
@@ -377,14 +758,14 @@ const STARTUP_SCHEMA_RECONCILIATION = Object.freeze({
     { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
     { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
   ],
+  houses_for_sale: HOUSES_FOR_SALE_STARTUP_COLUMNS,
+  purchase_process_inspection_payments:
+    PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS,
+  purchase_process_contract_uploads: PURCHASE_PROCESS_CONTRACT_UPLOAD_COLUMNS,
 });
 
 async function ensureTableColumns(client, tableName, columns) {
-  const { rows } = await client.query(`SELECT to_regclass($1) AS existing_table`, [
-    tableName,
-  ]);
-
-  if (!rows[0]?.existing_table) {
+  if (!(await doesTableExist(client, tableName))) {
     console.log(
       `[DB] startup schema reconciliation skipped missing table: ${tableName}`
     );
@@ -501,18 +882,13 @@ async function createFinanceAndOpsTables(client) {
       cancelled_at TIMESTAMPTZ
     );
   `);
+
+  await createPurchaseProcessTables(client);
+  await ensurePurchaseProcessBuyerForeignKeys(client);
 }
 
 async function ensureUpdatedAtTrigger(client) {
-  await client.query(`
-    CREATE OR REPLACE FUNCTION set_updated_at()
-    RETURNS TRIGGER AS $$
-    BEGIN
-      NEW.updated_at = NOW();
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-  `);
+  await ensureSetUpdatedAtFunction(client);
 
   const triggerTables = [
     "users",
@@ -526,17 +902,13 @@ async function ensureUpdatedAtTrigger(client) {
     "tenant_meta",
     "finance_accounts",
     "property_orders",
+    "purchase_process_inspection_payments",
+    "purchase_process_contract_uploads",
     "images",
   ];
 
   for (const tableName of triggerTables) {
-    await client.query(`
-      DROP TRIGGER IF EXISTS trg_${tableName}_updated_at ON ${tableName};
-      CREATE TRIGGER trg_${tableName}_updated_at
-      BEFORE UPDATE ON ${tableName}
-      FOR EACH ROW
-      EXECUTE FUNCTION set_updated_at();
-    `);
+    await ensureUpdatedAtTriggerForTable(client, tableName);
   }
 }
 
@@ -559,6 +931,12 @@ async function ensureIndexes(client) {
     `CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_property_orders_buyer_id ON property_orders(buyer_id)`,
     `CREATE INDEX IF NOT EXISTS idx_property_orders_property ON property_orders(property_type, property_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_process_inspection_payments_property_buyer ON purchase_process_inspection_payments(property_id, buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_inspection_payments_property_id ON purchase_process_inspection_payments(property_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_inspection_payments_buyer_id ON purchase_process_inspection_payments(buyer_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_property_buyer ON purchase_process_contract_uploads(property_id, buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_property_id ON purchase_process_contract_uploads(property_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_buyer_id ON purchase_process_contract_uploads(buyer_id)`,
   ];
 
   for (const statement of indexSql) {
@@ -584,6 +962,12 @@ export async function initializeDatabaseTablesSafe() {
     );
     await runStep(client, "images table hotfix", async () =>
       ensureImagesTableHotfix(client)
+    );
+    await runStep(client, "houses_for_sale table hotfix", async () =>
+      ensureHousesForSaleTableHotfix(client)
+    );
+    await runStep(client, "purchase process tables hotfix", async () =>
+      ensurePurchaseProcessTablesHotfix(client)
     );
     await runStep(client, "startup schema reconciliation", async () =>
       ensureStartupSchemaReconciliation(client)

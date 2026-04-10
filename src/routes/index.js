@@ -8,6 +8,7 @@ import apartmentRoutes from "./apartment.routes.js";
 import devSeedRoutes from "./dev.seed.routes.js";
 import houseForSaleRoutes from "./house.for.sale.routes.js";
 import houseRoutes from "./house.routes.js";
+import purchaseProcessRoutes from "./purchase.process.routes.js";
 import imagesRoutes from "./utility.routes/images.routes.js";
 
 const router = Router();
@@ -21,6 +22,7 @@ router.use("/apartments", apartmentRoutes);
 router.use("/houses-for-sale", houseForSaleRoutes);
 router.use("/dev", devSeedRoutes);
 router.use("/houses", houseRoutes);
+router.use("/purchase-process", purchaseProcessRoutes);
 router.use("/images", imagesRoutes);
 
 export default router;

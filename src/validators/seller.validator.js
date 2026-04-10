@@ -50,6 +50,16 @@ export const sellerSearchQuerySchema = Joi.object({
   offset: Joi.number().integer().min(0).default(0),
 });
 
+export const sellerPropertyListingQuerySchema = Joi.object({
+  propertyType: Joi.string()
+    .valid("all", "estate", "house", "house_for_sale", "land")
+    .default("all"),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  sortBy: Joi.string().valid("created_at", "price", "name", "property_type").default("created_at"),
+  sortOrder: Joi.string().valid("asc", "desc").default("desc"),
+});
+
 export const sellerUserLoginSchema = Joi.object({
   userId: uuid.required(),
 });
