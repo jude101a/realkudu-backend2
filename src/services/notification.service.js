@@ -1,4 +1,4 @@
-import { pool } from "../config/db.js";
+import pool from "../config/db.js";
 
 export async function saveNotification({ userId, title, body, data }) {
   await pool.query(

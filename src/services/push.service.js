@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import { pool } from "../config/db.js";
+import pool from "../config/db.js";
 
 import serviceAccount from "../serviceAccountKey.json" assert { type: "json" };
 
