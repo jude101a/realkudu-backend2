@@ -54,6 +54,8 @@ export const createHouse = wrap(async (req, res) => {
     verificationStatus: req.body.verificationStatus || "pending",
     currency: req.body.currency || "NGN",
   });
+
+  
   return ok(res, created, "House created successfully", undefined, 201);
 });
 

@@ -573,7 +573,30 @@ async function createCoreTables(client) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT chk_lawyers_status CHECK (status IN ('pending','approved','rejected','suspended'))
     );
+
+    
   `);
+
+  await client.query(`
+    CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  data JSONB,
+  is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW()
+);`);
+
+
+await client.query(`
+  CREATE TABLE device_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID,
+  token TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);`);
+  
 }
 
 async function createPropertyTables(client) {
@@ -914,6 +937,7 @@ async function ensureUpdatedAtTrigger(client) {
 
 async function ensureIndexes(client) {
   const indexSql = [
+    `CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
     `CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users(phone_number)`,
     `CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at)`,

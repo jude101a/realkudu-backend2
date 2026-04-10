@@ -13,6 +13,7 @@ import {
 
 import { protect } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
+import { getUserNotifications, saveDeviceToken } from "../services/notification.service.js";
 
 const router = express.Router();
 
@@ -83,5 +84,8 @@ router.get("/fullname/:email", protect, getUserFullname);
  */
 router.get("/:id/basic", protect, getUserBasicInfoById);
 router.get("/get/:id/basic", protect, getUserBasicInfoById);
+
+router.post("/save-device-token", saveDeviceToken);
+router.get("/userNotifications/:id", protect, getUserNotifications);
 
 export default router;

@@ -11,6 +11,8 @@ import {
   updateUserById,
   updateUserIsLawyer,
 } from "../models/user.models.js";
+  import { notificationQueue } from "../queues/notification.queue.js";
+
 import { sendVerificationEmail } from "../utils/email.js";
 
 const SALT_ROUNDS = 12;
@@ -225,6 +227,16 @@ export const changePassword = async (req, res, next) => {
 
     const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     await updatePasswordModel(id, newHash);
+
+
+await notificationQueue.add("Password Changed", {
+  userId: user.id,
+  title: "Password Changed",
+  body: "Your password has been changed successfully",
+  data: {
+    
+  },
+});
 
     return sendSuccess(res, 200, {
       message: "Password updated successfully",
