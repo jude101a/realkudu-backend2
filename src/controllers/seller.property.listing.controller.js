@@ -42,10 +42,14 @@ const parseQuery = (query) => ({
 });
 
 export const getSellerPropertyListings = wrap(async (req, res) => {
-  const sellerId = req.params.id;
+  const sellerId = String(req.params.id).trim();
   const pagination = parsePagination(req.query);
   const sort = parseSort(req.query);
   const queryFilters = parseQuery(req.query);
+
+  if (!sellerId) {
+    return fail(res, 400, "Seller ID is required", "VALIDATION_ERROR");
+  }
 
   const result = await SellerPropertyListingModel.findAllBySeller(sellerId, {
     ...pagination,

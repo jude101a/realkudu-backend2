@@ -10,6 +10,7 @@ import houseForSaleRoutes from "./house.for.sale.routes.js";
 import houseRoutes from "./house.routes.js";
 import purchaseProcessRoutes from "./purchase.process.routes.js";
 import imagesRoutes from "./utility.routes/images.routes.js";
+import notificationRoutes from "./utility.routes/notification.route.js";
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use("/dev", devSeedRoutes);
 router.use("/houses", houseRoutes);
 router.use("/purchase-process", purchaseProcessRoutes);
 router.use("/images", imagesRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;

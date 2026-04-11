@@ -108,14 +108,7 @@ class HouseForSaleModel {
       `INSERT INTO ${TABLE} (${columns.join(", ")}) VALUES (${placeholders}) RETURNING *`,
       values
     );
-    await notificationQueue.add("House Created", {
-      userId: rows[0].owner_id,
-      title: "Password Changed",
-      body: "Your password has been changed successfully",
-      data: {
-        
-      },
-    });
+    
     return rows[0];
   }
 

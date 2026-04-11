@@ -1,17 +1,22 @@
-import { Redis } from "ioredis";
+import Redis from 'ioredis';
 
-const redisUrl = process.env.REDIS_URL || process.env.REDIS_URI || process.env.REDIS;
 
-const redisConnection = redisUrl
-  
+// ✅ Connection options (USED BY BullMQ)
+export const redisConnectionOptions = {
+  maxRetriesPerRequest: 3,
+  retryStrategy: (times) => {
+    if (times > 5) return null;
+    return Math.min(times * 100, 2000);
+  },
+};
+const redis = new Redis(process.env.REDIS_URL, redisConnectionOptions);
 
-export const redis = new Redis(redisConnection);
-export const redisConnectionOptions = redisConnection;
-
-redis.on("connect", () => {
-  console.log("✅ Redis connected");
+redis.on('connect', () => {
+  console.log('✅ Redis connected');
 });
 
-redis.on("error", (error) => {
-  console.error("❌ Redis error", error);
+redis.on('error', (err) => {
+  console.error('❌ Redis error:', err);
 });
+
+export default redis;

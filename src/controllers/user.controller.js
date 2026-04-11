@@ -165,6 +165,14 @@ export const login = async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
+    await notificationQueue.add("Login Alert", {
+      userId: user.id,
+      title: "New Login",
+      body: "Your account was just accessed. If this wasn't you, please secure your account immediately.",
+      data: {
+        type: "login_alert",
+      },
+    });
 
     return sendSuccess(res, 200, {
       token,

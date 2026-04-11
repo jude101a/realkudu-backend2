@@ -1,23 +1,19 @@
-import { Worker } from "bullmq";
+import { Worker } from 'bullmq';
+import { saveNotification, sendPushNotification } from '../services/notification.service.js';
 import { redisConnectionOptions } from "../config/redis.js";
-import { sendPushNotification } from "../services/push.service.js";
-import { saveNotification } from "../services/notification.service.js";
 
-new Worker(
-  "notifications",
-  async (job) => {
-    const { userId, title, body, data } = job.data;
+new Worker('notifications', async (job) => {
+  const { userId, title, body, data } = job.data;
 
-    // 1. Save to DB (in-app notification)
-    await saveNotification({
-      userId,
-      title,
-      body,
-      data,
-    });
-
-    // 2. Send Push Notification
+  try {
+    await saveNotification({ userId, title, body, data });
     await sendPushNotification(userId, title, body, data);
-  },
-  { connection: redisConnectionOptions }
-);
+    console.log(`✅ Job completed for user: ${userId}`);
+  } catch (err) {
+    console.error(`❌ Job failed for user: ${userId}`, err);
+    throw err; // Let BullMQ retry or log as needed
+  }
+}, { connection:{
+    url: process.env.REDIS_URL,
+    ...redisConnectionOptions,
+  }, });

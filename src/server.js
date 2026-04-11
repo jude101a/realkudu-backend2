@@ -1,4 +1,5 @@
 import "./config/env.js";
+import "./workers/notification.worker.js";
 import app from "./app.js";
 import { ensureDatabaseConnectivity } from "./config/db.js";
 import { initializeDatabaseTablesSafe } from "./data/initDb.safe.js";

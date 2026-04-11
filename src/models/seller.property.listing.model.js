@@ -159,8 +159,16 @@ class SellerPropertyListingModel {
   }
 
   static async findAllBySeller(sellerId, options = {}) {
-    const { page = 1, limit = 20, sortBy = "created_at", sortOrder = "desc", propertyType = PROPERTY_TYPES.ALL } = options;
-    const offset = (Math.max(Number(page) || 1, 1) - 1) * Math.max(Number(limit) || 20, 1);
+    if (!sellerId || typeof sellerId !== "string") {
+      throw new Error("Seller ID must be a valid non-empty string");
+    }
+
+    const propertyType = String(options.propertyType || PROPERTY_TYPES.ALL).toLowerCase().trim();
+    const page = Math.max(Number(options.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+    const sortBy = String(options.sortBy || "created_at").toLowerCase();
+    const sortOrder = String(options.sortOrder || "desc").toLowerCase();
+    const offset = (page - 1) * limit;
 
     const built = buildPropertyUnion({ sellerId, propertyType });
     if (!built.unionSql) {
@@ -168,8 +176,8 @@ class SellerPropertyListingModel {
         rows: [],
         total: 0,
         typeCounts: normalizeTypeCounts([]),
-        page: Math.max(Number(page) || 1, 1),
-        limit: Math.max(Number(limit) || 20, 1),
+        page,
+        limit,
         totalPages: 0,
       };
     }
@@ -211,13 +219,13 @@ class SellerPropertyListingModel {
       pool.query(countSql, built.values),
     ]);
 
-    const total = listResult.rows[0]?.total_count || 0;
+    const total = Number(listResult.rows[0]?.total_count || 0);
 
     return {
       rows: listResult.rows.map(normalizeRow),
       total,
-      page: Math.max(Number(page) || 1, 1),
-      limit: Math.max(Number(limit) || 20, 1),
+      page,
+      limit,
       totalPages: total ? Math.ceil(total / limit) : 0,
       typeCounts: normalizeTypeCounts(countResult.rows),
     };
