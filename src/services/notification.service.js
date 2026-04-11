@@ -105,12 +105,33 @@ export const getUserNotifications = async (req, res) => {
 
 export const saveDeviceToken = async (req, res) => {
   const { token } = req.body;
-  const userId = req.user.id;
+  const userId = req.userId;
 
-  await pool.query(
-    `INSERT INTO device_tokens (user_id, token) VALUES ($1, $2)`,
-    [userId, token]
-  );
+  if (!token) {
+    return res.status(400).json({
+      success: false,
+      error: "Token is required",
+    });
+  }
 
-  res.json({ success: true });
+  try {
+    await pool.query(
+      `
+      INSERT INTO device_tokens (user_id, token)
+      VALUES ($1, $2)
+      ON CONFLICT (token)
+      DO UPDATE SET user_id = EXCLUDED.user_id
+      `,
+      [userId, token]
+    );
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("❌ Error saving device token for user", userId, error);
+
+    return res.status(500).json({
+      success: false,
+      error: "Failed to save device token",
+    });
+  }
 };

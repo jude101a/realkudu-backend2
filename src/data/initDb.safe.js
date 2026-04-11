@@ -597,6 +597,8 @@ await client.query(`
   created_at TIMESTAMP DEFAULT NOW()
 );`);
   
+
+ALTER TABLE device_tokens ADD CONSTRAINT unique_token UNIQUE (token);
 }
 
 async function createPropertyTables(client) {
