@@ -36,16 +36,27 @@ export async function sendNotification(data, callback) {
         // Call callback when response ends
         res.on("end", function() {
             try {
-                if (responseData) {
-                    const parsedData = JSON.parse(responseData);
-                    console.log('✅ OneSignal response:', parsedData);
-                    return callback(null, parsedData);
-                } else {
-                    // Handle empty response
-                    return callback(null, { success: true });
+                const statusCode = res.statusCode || 0;
+                const parsedData = responseData ? JSON.parse(responseData) : {};
+
+                const hasErrors = parsedData && (
+                    parsedData.errors?.length > 0 ||
+                    parsedData.error ||
+                    statusCode >= 400
+                );
+
+                if (hasErrors) {
+                    const errorMessage = parsedData.errors
+                        ? parsedData.errors.join('; ')
+                        : parsedData.error || `OneSignal returned status ${statusCode}`;
+                    console.error('❌ OneSignal API error:', statusCode, errorMessage, parsedData);
+                    return callback(new Error(errorMessage), parsedData);
                 }
+
+                console.log('✅ OneSignal response:', parsedData);
+                return callback(null, parsedData);
             } catch (parseError) {
-                console.error('❌ Failed to parse OneSignal response:', parseError);
+                console.error('❌ Failed to parse OneSignal response:', parseError, responseData);
                 return callback(parseError, null);
             }
         });
