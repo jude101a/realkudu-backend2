@@ -3,6 +3,7 @@ import SellerModel, {
   SellerType,
   SellerVerificationStatus,
 } from "../models/seller.model.js";
+import { notificationQueue } from "../queues/notification.queue.js";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -164,6 +165,17 @@ export const loginSeller = withErrorHandling(async (req, res) => {
   const found = await SellerModel.findByUserId(userId);
   const seller = found.rows[0];
   if (!seller) return fail(res, 404, "Seller account not found", "SELLER_NOT_FOUND");
+
+  notificationQueue.add("Welcome Back", {
+    userId,
+    title: "Welcome back!",
+    body: "Welcome back! Your seller dashboard is ready.",
+    data: {
+      type: "welcome_back",
+    },
+  }).catch((error) => {
+    console.error("❌ Failed to enqueue seller login welcome notification", error);
+  });
 
   return ok(res, { message: "Login successful", data: sanitizeSeller(seller) });
 });

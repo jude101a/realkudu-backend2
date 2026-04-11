@@ -165,13 +165,16 @@ export const login = async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
-    await notificationQueue.add("Login Alert", {
+
+    notificationQueue.add("Welcome Back", {
       userId: user.id,
-      title: "New Login",
-      body: "Your account was just accessed. If this wasn't you, please secure your account immediately.",
+      title: "Welcome back!",
+      body: "Welcome back! Your account is active and ready to go.",
       data: {
-        type: "login_alert",
+        type: "welcome_back",
       },
+    }).catch((error) => {
+      console.error("❌ Failed to enqueue login welcome notification", error);
     });
 
     return sendSuccess(res, 200, {
