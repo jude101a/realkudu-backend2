@@ -9,19 +9,38 @@ dotenv.config();
 
 // Ensure service account is initialized once
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-if (!admin.apps.length && serviceAccountPath) {
-  try {
-    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-    console.log('✅ Firebase initialized');
-  } catch (error) {
-    console.warn('⚠️ Firebase initialization failed:', error.message);
+const localServiceAccountPath = path.resolve(process.cwd(), 'serviceAccountKey.json');
+let firebaseInitialized = false;
+
+const initializeFirebase = () => {
+  if (!admin.apps.length) {
+    let serviceAccount = null;
+
+    if (serviceAccountPath && fs.existsSync(serviceAccountPath)) {
+      serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    } else if (fs.existsSync(localServiceAccountPath)) {
+      serviceAccount = JSON.parse(fs.readFileSync(localServiceAccountPath, 'utf8'));
+    }
+
+    if (serviceAccount) {
+      try {
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+        });
+        firebaseInitialized = true;
+        console.log('✅ Firebase initialized');
+      } catch (error) {
+        console.warn('⚠️ Firebase initialization failed:', error.message);
+      }
+    } else {
+      console.warn(
+        '⚠️ Firebase service account not found. Set FIREBASE_SERVICE_ACCOUNT_PATH or provide serviceAccountKey.json in the project root.'
+      );
+    }
   }
-} else if (!serviceAccountPath) {
-  console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT_PATH not set, push notifications disabled');
-}
+};
+
+initializeFirebase();
 
 export async function saveNotification({ userId, title, body, data }) {
   await pool.query(
@@ -33,20 +52,36 @@ export async function saveNotification({ userId, title, body, data }) {
 
 export async function sendPushNotification(userId, title, body, data) {
   if (!admin.apps.length) {
-    console.warn('⚠️ Firebase not initialized, skipping push notification');
+    console.warn('⚠️ Firebase not initialized, skipping push notification for user', userId);
     return;
   }
 
   const tokens = await getDeviceTokensForUser(userId);
-  if (!tokens.length) return;
+  if (!tokens.length) {
+    console.warn('⚠️ No device tokens found for user', userId);
+    return;
+  }
 
-  await admin.messaging().sendEachForMulticast({
-    tokens,
-    notification: { title, body },
-    data: Object.fromEntries(
-      Object.entries(data || {}).map(([k, v]) => [k, String(v)])
-    ),
-  });
+  try {
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      data: Object.fromEntries(
+        Object.entries(data || {}).map(([k, v]) => [k, String(v)])
+      ),
+    });
+
+    console.log(
+      `✅ Push notification sent for user ${userId}: ${response.successCount}/${response.failureCount} success`
+    );
+
+    if (response.failureCount > 0) {
+      console.error('❌ Push send failures', response.responses);
+    }
+  } catch (error) {
+    console.error('❌ Firebase push send failed for user', userId, error);
+    throw error;
+  }
 }
 
 async function getDeviceTokensForUser(userId) {
