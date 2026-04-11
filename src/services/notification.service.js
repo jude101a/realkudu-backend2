@@ -93,7 +93,11 @@ async function getDeviceTokensForUser(userId) {
 }
 
 export const getUserNotifications = async (req, res) => {
-  const userId = req.userId;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, error: "Unauthorized" });
+  }
 
   const result = await pool.query(
     `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC`,
@@ -105,7 +109,11 @@ export const getUserNotifications = async (req, res) => {
 
 export const saveDeviceToken = async (req, res) => {
   const { token } = req.body;
-  const userId = req.userId;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, error: "Unauthorized" });
+  }
 
   if (!token) {
     return res.status(400).json({

@@ -578,27 +578,60 @@ async function createCoreTables(client) {
   `);
 
   await client.query(`
-    CREATE TABLE notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  data JSONB,
-  is_read BOOLEAN DEFAULT false,
-  created_at TIMESTAMP DEFAULT NOW()
-);`);
+    CREATE TABLE IF NOT EXISTS notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      data JSONB,
+      is_read BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
 
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS device_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID,
+      token TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
 
-await client.query(`
-  CREATE TABLE device_tokens (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID,
-  token TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);`);
-  
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_device_tokens_token ON device_tokens(token);
+  `);
+}
 
-ALTER TABLE device_tokens ADD CONSTRAINT unique_token UNIQUE (token);
+async function ensureNotificationTables(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS device_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID,
+      token TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_device_tokens_token ON device_tokens(token);
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      data JSONB,
+      is_read BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+  `);
 }
 
 async function createPropertyTables(client) {
@@ -997,6 +1030,10 @@ export async function initializeDatabaseTablesSafe() {
     );
     await runStep(client, "startup schema reconciliation", async () =>
       ensureStartupSchemaReconciliation(client)
+    );
+
+    await runStep(client, "ensure notification tables", async () =>
+      ensureNotificationTables(client)
     );
 
     if (await alreadyApplied(client)) {
