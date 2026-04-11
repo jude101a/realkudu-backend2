@@ -1,11 +1,13 @@
+import fs from "fs";
+import path from "path";
 import dotenv from "dotenv";
 
-const hasRuntimeConfig = Boolean(
-  process.env.DATABASE_URL && process.env.JWT_SECRET
-);
-
-if (!hasRuntimeConfig) {
-  dotenv.config({ quiet: true });
+const envPath = path.resolve(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`✅ Loaded environment from ${envPath}`);
+  }
 }
 
 export const env = {

@@ -1,12 +1,3 @@
-// Load environment variables if not already loaded
-import dotenv from 'dotenv';
-const hasRuntimeConfig = Boolean(
-  process.env.DATABASE_URL && process.env.JWT_SECRET
-);
-if (!hasRuntimeConfig) {
-  dotenv.config();
-}
-
 const ONE_SIGNAL_CONFIG = {
   appId: process.env.ONE_SIGNAL_APP_ID,
   apiKey: process.env.ONE_SIGNAL_API_KEY,
