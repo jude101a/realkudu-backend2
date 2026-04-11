@@ -1,13 +1,9 @@
-import  pool  from '../config/db.js';
+import pool from '../config/db.js';
 import admin from 'firebase-admin';
 import path from 'path';
 import fs from 'fs';
-import dotenv from 'dotenv';
 import ONE_SIGNAL_CONFIG from "../config/oneSignal.js";
 import { sendNotification } from "../services/push.notification.service.js";
-
-// Load environment variables
-dotenv.config();
 
 // Ensure service account is initialized once
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
@@ -159,11 +155,14 @@ export const sendNotificationToAll = async (req, res) => {
     }
 
     // Validate OneSignal config
-    if (!ONE_SIGNAL_CONFIG.appId) {
-      console.error('❌ OneSignal appId not configured');
+    if (!ONE_SIGNAL_CONFIG.appId || !ONE_SIGNAL_CONFIG.apiKey) {
+      console.error('❌ OneSignal configuration missing:', {
+        appId: !ONE_SIGNAL_CONFIG.appId ? 'NOT SET' : '✓',
+        apiKey: !ONE_SIGNAL_CONFIG.apiKey ? 'NOT SET' : '✓'
+      });
       return res.status(500).json({
         success: false,
-        error: "Service not properly configured",
+        error: "OneSignal not configured. Add ONE_SIGNAL_APP_ID and ONE_SIGNAL_API_KEY to Render environment variables.",
       });
     }
 
@@ -228,11 +227,14 @@ export const sendNotificationToUser = async (req, res) => {
     }
 
     // Validate OneSignal config
-    if (!ONE_SIGNAL_CONFIG.appId) {
-      console.error('❌ OneSignal appId not configured');
+    if (!ONE_SIGNAL_CONFIG.appId || !ONE_SIGNAL_CONFIG.apiKey) {
+      console.error('❌ OneSignal configuration missing:', {
+        appId: !ONE_SIGNAL_CONFIG.appId ? 'NOT SET' : '✓',
+        apiKey: !ONE_SIGNAL_CONFIG.apiKey ? 'NOT SET' : '✓'
+      });
       return res.status(500).json({
         success: false,
-        error: "Service not properly configured",
+        error: "OneSignal not configured. Add ONE_SIGNAL_APP_ID and ONE_SIGNAL_API_KEY to Render environment variables.",
       });
     }
 
