@@ -3,7 +3,7 @@ import SellerModel, {
   SellerType,
   SellerVerificationStatus,
 } from "../models/seller.model.js";
-import { notificationQueue } from "../queues/notification.queue.js";
+  import { notificationQueue } from "../queues/notification.queue.js";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -154,10 +154,45 @@ export const registerIndividualSeller = withErrorHandling(async (req, res) =>
   registerSeller(req, res, SellerType.INDIVIDUAL)
 );
 
-export const registerCompanySeller = withErrorHandling(async (req, res) =>
-  registerSeller(req, res, SellerType.COMPANY)
-);
+export const registerCompanySeller = withErrorHandling(async (req, res) => {
+  // ✅ Ensure seller is created first
+  const result = await registerSeller(req, res, SellerType.COMPANY);
 
+  try {
+    // ⚠️ Prefer getting userId from result or req.user
+    const userId = result?.userId || req.userId || req.body.userId;
+
+    if (!userId) {
+      console.warn("⚠️ No userId found for notification");
+      return;
+    }
+
+    // ✅ Await queue (important for error handling)
+    await notificationQueue.add(
+      "WELCOME_SELLER",
+      {
+        userId,
+        title: "Welcome to onboard!",
+        body: "Your company seller account has been created successfully. You can now list properties and manage your sales.",
+        data: {
+          type: "welcome",
+        },
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 5000,
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "❌ Failed to enqueue company seller welcome notification",
+      error
+    );
+  }
+});
 export const loginSeller = withErrorHandling(async (req, res) => {
   const { userId } = req.body || {};
   if (!assertUuid(res, userId, "userId")) return;
@@ -166,16 +201,6 @@ export const loginSeller = withErrorHandling(async (req, res) => {
   const seller = found.rows[0];
   if (!seller) return fail(res, 404, "Seller account not found", "SELLER_NOT_FOUND");
 
-  notificationQueue.add("Welcome Back", {
-    userId,
-    title: "Welcome back!",
-    body: "Welcome back! Your seller dashboard is ready.",
-    data: {
-      type: "welcome_back",
-    },
-  }).catch((error) => {
-    console.error("❌ Failed to enqueue seller login welcome notification", error);
-  });
 
   return ok(res, { message: "Login successful", data: sanitizeSeller(seller) });
 });
@@ -262,6 +287,28 @@ export const updateBusinessProfile = withErrorHandling(async (req, res) => {
   if (!assertUuid(res, req.params.id, "id")) return;
   const result = await SellerModel.updateBusinessProfile(req.params.id, req.body || {});
   if (!result.rowCount) return fail(res, 404, "Seller not found", "SELLER_NOT_FOUND");
+  try {
+  await notificationQueue.add(
+    "Profile Updated",
+    {
+      userId: req.params.id,
+      title: "Profile Updated",
+      body: "Your business profile has been updated successfully.",
+      data: {
+        type: "info",
+      },
+    },
+    {
+      attempts: 3,
+      backoff: {
+        type: "exponential",
+        delay: 5000,
+      },
+    }
+  );
+} catch (error) {
+  console.error("❌ Failed to enqueue  notification", error);
+}
   return ok(res, { message: "Profile updated successfully", data: sanitizeSeller(result.rows[0]) });
 });
 

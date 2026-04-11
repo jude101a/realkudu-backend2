@@ -207,6 +207,15 @@ export const updateProfile = async (req, res, next) => {
       return sendError(res, 404, "User not found");
     }
 
+    notificationQueue.add("Profile Updated", {
+      userId: user.id,
+      title: "Profile Updated",
+      body: "Your profile has been updated successfully",
+      data: {
+        type: "info",
+      },
+    })
+
     return sendSuccess(res, 200, { user: sanitizeUser(updatedUser) });
   } catch (err) {
     return next(err);
@@ -270,6 +279,18 @@ export const setLawyerStatus = async (req, res, next) => {
     if (!updatedUser) {
       return sendError(res, 404, "User not found");
     }
+
+
+    notificationQueue.add("Lawyer Status Updated", {
+      userId: user.id,
+      title: "Lawyer Status Updated",
+      body: "Your lawyer status has been updated successfully",
+      data: {
+        type: "welcome_back",
+      },
+    }).catch((error) => {
+      console.error("❌ Failed to enqueue login welcome notification", error);
+    });
 
     return sendSuccess(res, 200, { user: sanitizeUser(updatedUser) });
   } catch (err) {

@@ -1,8 +1,11 @@
 import express from 'express';
 import { notificationQueue } from '../../queues/notification.queue.js';
+import { sendNotificationToUser, sendNotificationToAll } from "../../services/notification.service.js";
 
 const router = express.Router();
 
+router.post('/send_to_all', sendNotificationToAll);
+router.post('/send_to_user', sendNotificationToUser);
 router.post('/inquiry', async (req, res) => {
   const { userId, propertyId, buyerId } = req.body;
   try {

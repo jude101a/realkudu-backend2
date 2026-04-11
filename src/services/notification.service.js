@@ -3,6 +3,8 @@ import admin from 'firebase-admin';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import ONE_SIGNAL_CONFIG from "../config/oneSignal.js";
+import { sendNotification } from "../services/push.notification.service.js";
 
 // Load environment variables
 dotenv.config();
@@ -141,5 +143,64 @@ export const saveDeviceToken = async (req, res) => {
       success: false,
       error: "Failed to save device token",
     });
+  }
+};
+
+export const sendNotificationToAll = async (req, res) => {
+  try {
+    const { title, body, data, priority, icon } = req.body;
+
+    var message = {
+      app_id: ONE_SIGNAL_CONFIG.appId,
+      contents: { en: body },
+      headings: { en: title },
+      included_segments: ["All"],
+      content_available: true,
+      data: data,
+      small_icon: icon || "ic_notification",
+    };
+
+    sendNotification(message, (err, response) => {
+      if (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+      return res.status(200).json({
+        success: true,
+        message: "Notification sent successfully",
+        data: response,
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const sendNotificationToUser = async (req, res) => {
+  try {
+    const { userId, title, body, data, priority, icon } = req.body;
+
+    var message = {
+      app_id: ONE_SIGNAL_CONFIG.appId,
+      contents: { en: body },
+      headings: { en: title },
+      included_segments: ["included_player_ids"],
+      included_player_ids: [userId],
+      content_available: true,
+      data: data,
+      small_icon: icon || "ic_notification",
+    };
+
+    sendNotification(message, (err, response) => {
+      if (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+      return res.status(200).json({
+        success: true,
+        message: "Notification sent successfully",
+        data: response,
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 };
