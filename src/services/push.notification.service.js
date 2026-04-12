@@ -12,18 +12,17 @@ export async function sendNotification(data, callback) {
     }
 
     const headers = {
-        "Content-Type": "application/json; charset=utf-8",
-        "Authorization": "Basic " + ONE_SIGNAL_CONFIG.apiKey
-    };
+  "Content-Type": "application/json; charset=utf-8",
+  "Authorization": `Bearer ${ONE_SIGNAL_CONFIG.apiKey}`,
+};
 
-    const options = {
-        host: "onesignal.com",
-        port: 443,
-        path: "/api/v1/notifications",
-        method: "POST",
-        headers: headers,
-        timeout: 10000 // 10 second timeout
-    };
+const options = {
+  host: "api.onesignal.com",
+  port: 443,
+  path: "/notifications",
+  method: "POST",
+  headers,
+};
 
     const req = https.request(options, function(res) {
         let responseData = '';

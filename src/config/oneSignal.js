@@ -1,3 +1,7 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+
 const ONE_SIGNAL_CONFIG = {
   appId: process.env.ONE_SIGNAL_APP_ID,
   apiKey: process.env.ONE_SIGNAL_API_KEY,
