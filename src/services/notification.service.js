@@ -279,3 +279,7 @@ export const sendNotificationToUser = async (req, res) => {
     });
   }
 };
+
+export default {
+  saveNotification,
+  sendPushNotification,}
