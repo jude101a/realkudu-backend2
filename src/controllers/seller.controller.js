@@ -159,40 +159,25 @@ export const registerCompanySeller = withErrorHandling(async (req, res) => {
   const result = await registerSeller(req, res, SellerType.COMPANY);
 
   try {
-    // ⚠️ Prefer getting userId from result or req.user
-    const userId = result?.userId || req.userId || req.body.userId;
-
-    if (!userId) {
-      console.warn("⚠️ No userId found for notification");
-      return;
-    }
-
-    // ✅ Await queue (important for error handling)
-    await notificationQueue.add(
-      "WELCOME_SELLER",
-      {
-        userId,
-        title: "Welcome to onboard!",
-        body: "Your company seller account has been created successfully. You can now list properties and manage your sales.",
-        data: {
-          type: "welcome",
-        },
-      },
-      {
-        attempts: 3,
-        backoff: {
-          type: "exponential",
-          delay: 5000,
-        },
-      }
-    );
+    await sendNotification({
+    user: {
+      id: req.userId,
+      email: req.sellerEmail,
+    },
+    title: "Registration Successful",
+    message: "Welcome to onboard! Your company seller account has been created successfully.",
+    channels: ["PUSH", "EMAIL", "IN_APP"],
+    data: {
+    
+    },
+  });
+  
   } catch (error) {
-    console.error(
-      "❌ Failed to enqueue company seller welcome notification",
-      error
-    );
+    
   }
+
 });
+
 export const loginSeller = withErrorHandling(async (req, res) => {
   const { userId } = req.body || {};
   if (!assertUuid(res, userId, "userId")) return;
@@ -288,27 +273,22 @@ export const updateBusinessProfile = withErrorHandling(async (req, res) => {
   const result = await SellerModel.updateBusinessProfile(req.params.id, req.body || {});
   if (!result.rowCount) return fail(res, 404, "Seller not found", "SELLER_NOT_FOUND");
   try {
-  await notificationQueue.add(
-    "Profile Updated",
-    {
-      userId: req.params.id,
-      title: "Profile Updated",
-      body: "Your business profile has been updated successfully.",
-      data: {
-        type: "info",
-      },
+    await sendNotification({
+    user: {
+      id: req.params.id,
+      email: req.sellerEmail,
     },
-    {
-      attempts: 3,
-      backoff: {
-        type: "exponential",
-        delay: 5000,
-      },
-    }
-  );
-} catch (error) {
-  console.error("❌ Failed to enqueue  notification", error);
-}
+    title: "Update Alert",
+    message: "Your business profile has been updated successfully.",
+    channels: ["PUSH","EMAIL", "IN_APP"],
+    data: {
+    
+    },
+  });
+  
+  } catch (error) {
+    
+  }
   return ok(res, { message: "Profile updated successfully", data: sanitizeSeller(result.rows[0]) });
 });
 

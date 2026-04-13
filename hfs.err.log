@@ -1,2 +1,0 @@
-⚠️ SMTP unavailable: SMTP authentication failed (code: EAUTH). Check SMTP credentials/app password configuration.
-⚠️ Continuing startup because REQUIRE_SMTP_ON_STARTUP is not true.

@@ -601,6 +601,19 @@ async function createCoreTables(client) {
   await client.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_device_tokens_token ON device_tokens(token);
   `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS onesignal_device_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID,
+      token TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_onesignal_device_tokens_token ON onesignal_device_tokens(token);
+  `);
 }
 
 async function ensureNotificationTables(client) {

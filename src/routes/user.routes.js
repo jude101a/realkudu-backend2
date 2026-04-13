@@ -86,6 +86,7 @@ router.get("/:id/basic", protect, getUserBasicInfoById);
 router.get("/get/:id/basic", protect, getUserBasicInfoById);
 
 router.post("/save-device-token", protect, saveDeviceToken);
+  
 router.get("/userNotifications/:id", protect, getUserNotifications);
 
 export default router;

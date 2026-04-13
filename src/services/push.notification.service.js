@@ -1,5 +1,6 @@
 import https from "https";
 import ONE_SIGNAL_CONFIG from "../config/oneSignal.js";
+import { fcm } from "../config/firebase.js";
 
 export async function sendNotification(data, callback) {
     // Input validation
@@ -13,7 +14,7 @@ export async function sendNotification(data, callback) {
 
     const headers = {
   "Content-Type": "application/json; charset=utf-8",
-  "Authorization": `Bearer ${ONE_SIGNAL_CONFIG.apiKey}`,
+  "Authorization": "key os_v2_app_nhcgwb466zcxri5otrdc6p3vehrb62o3jy7eqbf2avwnp63hnmwrgfgmcpoyz5vzxnlo7bmzaqrafppovwk6qignxwwqep46ksxba4q",
 };
 
 const options = {
@@ -75,4 +76,21 @@ const options = {
         console.error('❌ Error writing request:', error);
         return callback(error, null);
     }
+}
+
+
+export async function sendPush({ token, title, body, data = {} }) {
+  if (!fcm) {
+    throw new Error("Firebase FCM not available. serviceAccountKey.json is missing.");
+  }
+  
+  if (!token) throw new Error("FCM token missing");
+
+  const message = {
+    token,
+    notification: { title, body },
+    data,
+  };
+
+  return await fcm.send(message);
 }

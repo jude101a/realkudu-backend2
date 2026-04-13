@@ -3,9 +3,11 @@ dotenv.config();
 
 
 const ONE_SIGNAL_CONFIG = {
-  appId: process.env.ONE_SIGNAL_APP_ID,
-  apiKey: process.env.ONE_SIGNAL_API_KEY,
+  appId: 'afca3b91-aa6c-4372-9384-ba42748acdda',
+  apiKey: 'os_v2_app_v7fdxenknrbxfe4exjbhjcwn3l7fwk7nfk2uduurv4g5n5i7u2rek3pb4beodw44gxkv2w5ibwjlwu5pmazkpyrsidjsdgex2bxvq2i',
 };
+
+
 
 // Validate and warn about missing config
 if (!ONE_SIGNAL_CONFIG.appId || !ONE_SIGNAL_CONFIG.apiKey) {

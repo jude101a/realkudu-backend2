@@ -4,7 +4,7 @@ import { sendNotificationToUser, sendNotificationToAll } from "../../services/no
 
 const router = express.Router();
 
-router.post('/send_to_all', sendNotificationToAll);
+router.get('/send_to_all', sendNotificationToAll);
 router.post('/send_to_user', sendNotificationToUser);
 router.post('/inquiry', async (req, res) => {
   const { userId, propertyId, buyerId } = req.body;

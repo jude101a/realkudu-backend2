@@ -14,6 +14,7 @@ import {
   import { notificationQueue } from "../queues/notification.queue.js";
 
 import { sendVerificationEmail } from "../utils/email.js";
+import { sendNotification } from "../services/notification.service.js";
 
 const SALT_ROUNDS = 12;
 const JWT_EXPIRES_IN = "7d";
@@ -165,18 +166,24 @@ export const login = async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
+try {
+  await sendNotification({
+  user: {
+    id: user.id,
+    email: user.email,
+  },
+  title: "Login Alert",
+  message: "Welcome back! You have successfully logged in to your account.",
+  channels: ["PUSH",],
+  data: {
+  
+  },
+});
 
-    notificationQueue.add("Welcome Back", {
-      userId: user.id,
-      title: "Welcome back!",
-      body: "Welcome back! Your account is active and ready to go.",
-      data: {
-        type: "welcome_back",
-      },
-    }).catch((error) => {
-      console.error("❌ Failed to enqueue login welcome notification", error);
-    });
-
+} catch (error) {
+  
+}
+    
     return sendSuccess(res, 200, {
       token,
       user: sanitizeUser(user),
@@ -207,14 +214,23 @@ export const updateProfile = async (req, res, next) => {
       return sendError(res, 404, "User not found");
     }
 
-    notificationQueue.add("Profile Updated", {
-      userId: user.id,
-      title: "Profile Updated",
-      body: "Your profile has been updated successfully",
-      data: {
-        type: "info",
-      },
-    })
+    try {
+  await sendNotification({
+  user: {
+    id: id,
+    email: await findUserById(id).then(u => u.email),
+  },
+  title: "Your Profile Was Updated",
+  message: "Your profile has been updated successfully. If you did not make this change, please contact support immediately.",
+  channels: ["EMAIL","IN_APP"],
+  data: {
+  
+  },
+});
+
+} catch (error) {
+  
+}
 
     return sendSuccess(res, 200, { user: sanitizeUser(updatedUser) });
   } catch (err) {
@@ -249,14 +265,23 @@ export const changePassword = async (req, res, next) => {
     await updatePasswordModel(id, newHash);
 
 
-await notificationQueue.add("Password Changed", {
-  userId: user.id,
-  title: "Password Changed",
-  body: "Your password has been changed successfully",
+try {
+  await sendNotification({
+  user: {
+    id: user.id,
+    email: user.email,
+  },
+  title: "Security Alert",
+  message: "Your password has been changed successfully. If you did not make this change, please contact support immediately.",
+  channels: ["PUSH", "EMAIL", "IN_APP"],
   data: {
-    
+  
   },
 });
+
+} catch (error) {
+  
+}
 
     return sendSuccess(res, 200, {
       message: "Password updated successfully",
@@ -281,16 +306,23 @@ export const setLawyerStatus = async (req, res, next) => {
     }
 
 
-    notificationQueue.add("Lawyer Status Updated", {
-      userId: user.id,
-      title: "Lawyer Status Updated",
-      body: "Your lawyer status has been updated successfully",
-      data: {
-        type: "welcome_back",
-      },
-    }).catch((error) => {
-      console.error("❌ Failed to enqueue login welcome notification", error);
-    });
+    try {
+  await sendNotification({
+  user: {
+    id: id,
+    email: await findUserById(id).then(u => u.email),
+  },
+  title: "Status Update Alert",
+  message: "Your lawyer status has been updated successfully.",
+  channels: ["PUSH", "EMAIL", "IN_APP"],
+  data: {
+  
+  },
+});
+
+} catch (error) {
+  
+}
 
     return sendSuccess(res, 200, { user: sanitizeUser(updatedUser) });
   } catch (err) {
