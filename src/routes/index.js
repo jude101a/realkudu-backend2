@@ -11,6 +11,7 @@ import houseRoutes from "./house.routes.js";
 import purchaseProcessRoutes from "./purchase.process.routes.js";
 import imagesRoutes from "./utility.routes/images.routes.js";
 import notificationRoutes from "./utility.routes/notification.route.js";
+import propertyListingRoutes from "./property.listing.route.js";
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use("/houses", houseRoutes);
 router.use("/purchase-process", purchaseProcessRoutes);
 router.use("/images", imagesRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/properties", propertyListingRoutes);
 
 export default router;

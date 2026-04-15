@@ -10,3 +10,5 @@ const router = Router();
 router.post("/getUserSpecific", getAllPropertiesByLocation);
 router.post("/getSellerSpecific", getSellerAllProperties);
 router.post("/getPropertyStats", getAllPropertiesStats);
+
+export default router;
