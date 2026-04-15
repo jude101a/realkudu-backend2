@@ -1,4 +1,4 @@
-import { notificationQueue } from "./queue.js";
+import { notificationQueue } from "../workers/notification.queue.js";
 import { v4 as uuidv4 } from "uuid";
 
 export async function sendNotification({
@@ -69,7 +69,7 @@ async function getDeviceTokensForUser(userId) {
 }
 
 export const getUserNotifications = async (req, res) => {
-  const userId = req.user?.id;
+  const userId = req.params.userId;
 
   if (!userId) {
     return res.status(401).json({ success: false, error: "Unauthorized" });
