@@ -1,13 +1,13 @@
 import express from 'express';
 import { notificationQueue } from '../../queues/notification.queue.js';
 import { getUserNotifications } from '../../services/notification.service.js';
-import { sendNotificationToUser, sendNotificationToAll, saveOneSignalDeviceToken } from "../../services/notifications.service.js";
+// import { sendNotificationToUser, saveOneSignalDeviceToken } from "../../services/notifications.service.js";
 
 const router = express.Router();
 
-router.get('/send_to_all', sendNotificationToAll);
-router.post('/send_to_user', sendNotificationToUser);
-router.post('/save_one_signal_token', saveOneSignalDeviceToken);
+// router.get('/send_to_all', sendNotificationToAll);
+// router.post('/send_to_user', sendNotificationToUser);
+// router.post('/save_one_signal_token', saveOneSignalDeviceToken);
 
 router.get("/get/:id", getUserNotifications);
 router.post('/inquiry', async (req, res) => {
