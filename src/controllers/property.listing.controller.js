@@ -70,6 +70,8 @@ const buildUnifiedQueryParts = ({
   sellerId,
   minPrice,
   maxPrice,
+ 
+  
 }) => {
   const values = [];
   const bind = (value) => {
@@ -105,7 +107,8 @@ const buildUnifiedQueryParts = ({
       SELECT
         'apartment'::text AS property_type,
         a.id AS id,
-        COALESCE(NULLIF(a.house_name, ''), CONCAT('Apartment - ', COALESCE(a.apartment_address, 'Unknown'))) AS name,
+        COALESCE(NULLIF(a.house_name, ''))) AS name,
+        a.images AS cover_image_url,
         COALESCE(a.apartment_address, '') AS location,
         a.rent_amount::numeric AS price,
         a.seller_id AS seller_id,
@@ -148,6 +151,7 @@ const buildUnifiedQueryParts = ({
         'land'::text AS property_type,
         l.property_id AS id,
         l.property_name AS name,
+        l.cover_image_url AS cover_image_url,
         COALESCE(l.property_address, l.state_location, '') AS location,
         l.price::numeric AS price,
         l.seller_id AS seller_id,
@@ -189,6 +193,7 @@ const buildUnifiedQueryParts = ({
         'house'::text AS property_type,
         h.house_id AS id,
         CONCAT('House - ', h.address) AS name,
+        h.images[1] AS cover_image_url,
         h.address AS location,
         h.asking_price::numeric AS price,
         h.owner_id AS seller_id,
@@ -251,6 +256,8 @@ const executeUnifiedList = async ({ filters, pagination, sort }) => {
       id,
       name,
       location,
+      cover_image_URL(details) AS cover_image,
+      name,
       price,
       seller_id,
       created_at,
@@ -282,6 +289,7 @@ const executeUnifiedList = async ({ filters, pagination, sort }) => {
       property_type: row.property_type,
       id: row.id,
       name: row.name,
+      cover_image_url: row.cover_image,
       location: row.location,
       price: row.price !== null ? Number(row.price) : null,
       seller_id: row.seller_id,

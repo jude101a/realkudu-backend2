@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import ONE_SIGNAL_CONFIG from "../config/oneSignal.js";
 import { sendNotification } from "../services/push.notification.service.js";
+import { title } from 'process';
 
 // Ensure service account is initialized once
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
@@ -225,67 +226,7 @@ export const getOneSignalDeviceToken = async (req, res) => {
 
 
 
-export const sendNotificationToAll = async (req, res) => {
-  try {
 
-    // Validate required fields
-    // if (!title || !body) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     error: "Title and body are required",
-    //   });
-    // }
-
-    // Validate OneSignal config
-    // if (!ONE_SIGNAL_CONFIG.appId || !ONE_SIGNAL_CONFIG.apiKey) {
-    //   console.error('❌ OneSignal configuration missing:', {
-    //     appId: !ONE_SIGNAL_CONFIG.appId ? 'NOT SET' : '✓',
-    //     apiKey: !ONE_SIGNAL_CONFIG.apiKey ? 'NOT SET' : '✓'
-    //   });
-    //   return res.status(500).json({
-    //     success: false,
-    //     error: "OneSignal not configured. Add ONE_SIGNAL_APP_ID and ONE_SIGNAL_API_KEY to Render environment variables.",
-    //   });
-    // }
-
-    const message = {
-      app_id: "69c46b07-9ef6-4578-a3ae-9c462f3f7521",
-      contents: { en: 'we are just testing' },
-      headings: { en: 'test' },
-      included_segments: ["All"],
-      data: {},
-    };
-
-    // Set a reasonable timeout for the entire operation
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout')), 15000)
-    );
-
-    const callbackPromise = new Promise((resolve, reject) => {
-      sendNotification(message, (err, response) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(response);
-        }
-      });
-    });
-
-    const response = await Promise.race([callbackPromise, timeoutPromise]);
-    
-    return res.status(200).json({
-      success: true,
-      message: "Notification sent successfully",
-      data: response,
-    });
-  } catch (error) {
-    console.error('❌ Error in sendNotificationToAll:', error.message);
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Failed to send notification",
-    });
-  }
-};
 
 export const sendNotificationToUser = async (req, res) => {
   try {
@@ -306,6 +247,8 @@ export const sendNotificationToUser = async (req, res) => {
       });
     }
 
+    const userToken = await getOneSignalDeviceToken(userId);
+
     // Validate OneSignal config
     // if (!ONE_SIGNAL_CONFIG.appId || !ONE_SIGNAL_CONFIG.apiKey) {
     //   console.error('❌ OneSignal configuration missing:', {
@@ -319,10 +262,11 @@ export const sendNotificationToUser = async (req, res) => {
     // }
 
     const message = {
-  app_id: "69c46b07-9ef6-4578-a3ae-9c462f3f7521",
+  app_id: process.env.ONE_SIGNAL_APP_ID,
   contents: { en: body },
   headings: { en: title },
-  include_player_ids: ["6cf201e7-fa5e-4593-a046-3293c43e4784"],
+  
+  include_subscription_ids: ["ONESIGNAL_SUBSCRIPTION_ID"],
   data: data || {},
 };
 
