@@ -7,6 +7,7 @@ const router = Router();
 
 
 
+router.get("/getUserSpecific", getAllPropertiesByLocation);
 router.post("/getUserSpecific", getAllPropertiesByLocation);
 router.post("/getSellerSpecific", getSellerAllProperties);
 router.post("/getPropertyStats", getAllPropertiesStats);

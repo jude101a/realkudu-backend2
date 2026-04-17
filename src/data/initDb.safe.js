@@ -722,7 +722,7 @@ async function createPropertyTables(client) {
       has_electricity BOOLEAN DEFAULT FALSE,
       has_parking_space BOOLEAN DEFAULT FALSE,
       has_internet BOOLEAN DEFAULT FALSE,
-      images TEXT,
+      images JSONB,
       cover_image_url TEXT,
       description TEXT,
       apartment_condition VARCHAR(100),
@@ -791,7 +791,7 @@ async function createPropertyTables(client) {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
-
+ 
   await createHousesForSaleTable(client);
 }
 
