@@ -14,54 +14,49 @@ export const paginationQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sortBy: Joi.string()
-    .valid("id", "property_id", "price", "created_at", "updated_at", "property_name", "status", "listing_date")
+    .valid("id", "property_id", "price", "created_at", "updated_at", "name", "status", "created_at")
     .default("created_at"),
   sortOrder: Joi.string().valid("asc", "desc").default("desc"),
 });
 
-export const filterQuerySchema = Joi.object({
-  page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(10),
-  sortBy: Joi.string()
-    .valid("id", "property_id", "price", "created_at", "updated_at", "property_name", "status", "listing_date")
-    .default("created_at"),
-  sortOrder: Joi.string().valid("asc", "desc").default("desc"),
-  status: Joi.string().max(50),
-  sellerId: uuid,
-  estateId: uuid,
-  isEstateLand: Joi.boolean(),
-  soldOut: Joi.boolean(),
-  landType: Joi.string().max(100),
-  minPrice: Joi.number().min(0),
-  maxPrice: Joi.number().min(0),
-});
-
-export const searchQuerySchema = Joi.object({
-  q: Joi.string().trim().min(2).required(),
-  page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(10),
-  sortBy: Joi.string()
-    .valid("id", "property_id", "price", "created_at", "updated_at", "property_name", "status", "listing_date")
-    .default("created_at"),
-  sortOrder: Joi.string().valid("asc", "desc").default("desc"),
-});
-
-export const createLandSchema = Joi.object({
+export const createSchema = Joi.object({
   propertyId: uuid.allow(null),
   estateId: uuid.allow(null),
   sellerId: uuid.required(),
-  propertyName: Joi.string().trim().min(2).max(500).required(),
-  propertyAddress: Joi.string().trim().min(3).max(2000).required(),
-  stateLocation: Joi.string().trim().min(2).max(255).required(),
+  houseName: Joi.string().trim(),
+  unitNumber: Joi.string().trim(),
+  propertType: Joi.object(),
+  name: Joi.string().trim().min(2).max(500).required(),
+  address: Joi.string().trim().min(3).max(2000).required(),
+  lga: Joi.string().trim().min(2).max(255).required(),
   country: Joi.string().trim().min(2).max(255).required(),
+  state: Joi.string().trim(),
+  bedrooms: Joi.number().min(0),
+  kitchens: Joi.number().min(0),
+  livingRooms: Joi.number().min(0),
+  toilets: Joi.number().min(0),
+  roomSize: Joi.number().min(0),
+
+  hasRunningWater: Joi.boolean().allow(null),
+  hasElectricity: Joi.boolean().allow(null),
+  hasParkingSpace: Joi.boolean().allow(null),
+  hasInternet: Joi.boolean().allow(null),
+
+
   coverImageUrl: Joi.string().uri().max(2048).allow(null, ""),
-  imageUrl: Joi.string().uri().max(2048).allow(null, ""),
-  galleryImages: Joi.alternatives().try(Joi.array().items(Joi.string()), Joi.object()).allow(null),
+
+
   price: Joi.number().min(0).required(),
-  availableQuantity: Joi.number().min(0).required(),
-  shortDescription: Joi.string().trim().min(2).max(5000).required(),
-  longDescription: Joi.string().trim().min(2).max(20000).required(),
-  landSize: Joi.number().min(0).allow(null),
+  askingPrice: Joi.number().min(0).required(),
+  finalPrice: Joi.number().min(0).required(),
+  currency: Joi.string().trim().min(3).max(4),
+  quantity: Joi.number().min(0).required(),
+
+
+  description: Joi.string().trim().min(2).max(5000).required(),
+  size: Joi.number().min(0).allow(null),
+
+
   customLandSize: Joi.number().min(0).allow(null),
   pricePer450sqm: Joi.number().min(0).allow(null),
   pricePer900sqm: Joi.number().min(0).allow(null),
@@ -81,27 +76,26 @@ export const createLandSchema = Joi.object({
   topography: Joi.string().trim().max(100).allow(null, ""),
   soilType: Joi.string().trim().max(100).allow(null, ""),
   fencingStatus: Joi.string().trim().max(100).allow(null, ""),
-  electricityAvailability: Joi.string().trim().max(100).allow(null, ""),
   accessRoadType: Joi.string().trim().max(100).allow(null, ""),
   surveyStatus: Joi.string().trim().max(100).allow(null, ""),
   governmentAcquisitionStatus: Joi.string().trim().max(100).allow(null, ""),
   usageStatus: Joi.string().trim().max(100).allow(null, ""),
   status: Joi.string().trim().max(50).allow(null, ""),
-  isEstateLand: Joi.boolean().allow(null),
+  isEstate: Joi.boolean().allow(null),
   soldOut: Joi.boolean().allow(null),
-  purchaseDate: Joi.date().iso().allow(null),
+  soldAt: Joi.date().iso().allow(null),
 })
   .rename("propertyID", "propertyId", { ignoreUndefined: true, override: true })
   .rename("estateID", "estateId", { ignoreUndefined: true, override: true })
   .rename("sellerID", "sellerId", { ignoreUndefined: true, override: true });
 
-export const updateLandSchema = createLandSchema.fork(
-  ["sellerId", "propertyName", "propertyAddress", "stateLocation", "country", "price", "availableQuantity", "shortDescription", "longDescription"],
+export const updateSchema = createSchema.fork(
+  ["sellerId", "name", "address", "state", "country", "price", "quantity", "description"],
   (schema) => schema.optional()
 ).min(1);
 
 export const bulkInsertSchema = Joi.object({
-  lands: Joi.array().items(createLandSchema).min(1).required(),
+  lands: Joi.array().items(createSchema).min(1).required(),
 });
 
 export const updateCoverSchema = Joi.object({

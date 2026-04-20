@@ -1,7 +1,9 @@
 import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v1";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v1";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v2";
+
+
 
 const HOUSES_FOR_SALE_STARTUP_COLUMNS = Object.freeze([
   { name: "owner_id", typeSql: "UUID" },
@@ -162,47 +164,6 @@ async function ensureUpdatedAtTriggerForTable(client, tableName) {
   `);
 }
 
-async function createHousesForSaleTable(client) {
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS houses_for_sale (
-      house_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      owner_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
-      agent_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
-      lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
-      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      house_name VARCHAR(255) NOT NULL,
-      status TEXT NOT NULL,
-      verification_status TEXT NOT NULL,
-      state TEXT NOT NULL,
-      lga TEXT NOT NULL,
-      address TEXT NOT NULL,
-      landmark TEXT,
-      latitude NUMERIC,
-      longitude NUMERIC,
-      bedrooms INTEGER,
-      bathrooms INTEGER,
-      toilets INTEGER,
-      floors INTEGER,
-      land_size NUMERIC,
-      house_type TEXT,
-      asking_price NUMERIC(14,2) NOT NULL CHECK (asking_price >= 0),
-      final_sale_price NUMERIC(14,2) CHECK (final_sale_price >= 0),
-      currency TEXT DEFAULT 'NGN',
-      title_document TEXT NOT NULL,
-      has_survey_plan BOOLEAN DEFAULT FALSE,
-      has_building_approval BOOLEAN DEFAULT FALSE,
-      governor_consent_obtained BOOLEAN DEFAULT FALSE,
-      description TEXT,
-      features TEXT,
-      images TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      sold_at TIMESTAMPTZ,
-      CONSTRAINT chk_hfs_status CHECK (status IN ('active','under_offer','sold','withdrawn')),
-      CONSTRAINT chk_hfs_verification CHECK (verification_status IN ('pending','verified','rejected'))
-    );
-  `);
-}
 
 async function createPurchaseProcessTables(client) {
   await client.query(`
@@ -297,122 +258,6 @@ async function ensureForeignKeyConstraint(
   );
 }
 
-async function ensureHousesForSaleSellerReferences(client) {
-  await client.query(`
-    UPDATE houses_for_sale h
-    SET owner_id = s.id
-    FROM sellers s
-    WHERE h.owner_id = s.user_id
-      AND NOT EXISTS (
-        SELECT 1
-        FROM sellers existing
-        WHERE existing.id = h.owner_id
-      );
-  `);
-
-  await client.query(`
-    UPDATE houses_for_sale h
-    SET agent_id = s.id
-    FROM sellers s
-    WHERE h.agent_id IS NOT NULL
-      AND h.agent_id = s.user_id
-      AND NOT EXISTS (
-        SELECT 1
-        FROM sellers existing
-        WHERE existing.id = h.agent_id
-      );
-  `);
-
-  await client.query(`
-    UPDATE houses_for_sale h
-    SET agent_id = NULL
-    WHERE h.agent_id IS NOT NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM sellers s
-        WHERE s.id = h.agent_id
-      );
-  `);
-
-  const { rows } = await client.query(`
-    SELECT house_id, owner_id
-    FROM houses_for_sale h
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM sellers s
-      WHERE s.id = h.owner_id
-    )
-    LIMIT 5
-  `);
-
-  if (rows.length) {
-    const sample = rows.map((row) => `${row.house_id}:${row.owner_id}`).join(", ");
-    throw new Error(
-      `houses_for_sale.owner_id contains values that do not map to sellers.id. Sample rows: ${sample}`
-    );
-  }
-}
-
-async function ensureHousesForSaleForeignKeys(client) {
-  await ensureHousesForSaleSellerReferences(client);
-
-  await ensureForeignKeyConstraint(
-    client,
-    "houses_for_sale",
-    "owner_id",
-    "fk_houses_for_sale_owner_id_sellers",
-    `FOREIGN KEY (owner_id) REFERENCES sellers(id) ON DELETE CASCADE`,
-    (definition) => {
-      const normalized = String(definition || "").toLowerCase();
-      return (
-        normalized.includes("foreign key (owner_id)") &&
-        normalized.includes("references sellers(id)") &&
-        normalized.includes("on delete cascade")
-      );
-    }
-  );
-
-  await ensureForeignKeyConstraint(
-    client,
-    "houses_for_sale",
-    "agent_id",
-    "fk_houses_for_sale_agent_id_sellers",
-    `FOREIGN KEY (agent_id) REFERENCES sellers(id) ON DELETE SET NULL`,
-    (definition) => {
-      const normalized = String(definition || "").toLowerCase();
-      return (
-        normalized.includes("foreign key (agent_id)") &&
-        normalized.includes("references sellers(id)") &&
-        normalized.includes("on delete set null")
-      );
-    }
-  );
-}
-
-async function ensureHousesForSaleIndexes(client) {
-  const statements = [
-    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_owner_id ON houses_for_sale(owner_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_status ON houses_for_sale(status)`,
-    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_verification_status ON houses_for_sale(verification_status)`,
-    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_state ON houses_for_sale(state)`,
-  ];
-
-  for (const statement of statements) {
-    await client.query(statement);
-  }
-}
-
-async function ensureHousesForSaleTableHotfix(client) {
-  await createHousesForSaleTable(client);
-  await ensureTableColumns(
-    client,
-    "houses_for_sale",
-    HOUSES_FOR_SALE_STARTUP_COLUMNS
-  );
-  await ensureHousesForSaleForeignKeys(client);
-  await ensureUpdatedAtTriggerForTable(client, "houses_for_sale");
-  await ensureHousesForSaleIndexes(client);
-}
 
 async function ensurePurchaseProcessIndexes(client) {
   const statements = [
@@ -648,6 +493,32 @@ async function ensureNotificationTables(client) {
   `);
 }
 
+async function ensureCustomTypes(client) {
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_type WHERE typname = 'propertytype'
+      ) THEN
+        CREATE TYPE PropertyType AS ENUM (
+          'house',
+          'land',
+          'estate',
+          'commercial',
+          'apartment',
+          'shop',
+          'office',
+          'warehouse',
+          'hotel',
+          'shortlet',
+          'houseForSale',
+          'unknown'
+        );
+      END IF;
+    END$$;
+  `);
+}
+
 async function createPropertyTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS estates (
@@ -702,97 +573,89 @@ async function createPropertyTables(client) {
     );
   `);
 
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS apartments (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      house_id UUID NOT NULL REFERENCES houses(id) ON DELETE CASCADE,
-      seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
-      tenant_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      apartment_address TEXT,
-      state TEXT,
-      lga TEXT,
-      house_name VARCHAR(255),
-      unit_number VARCHAR(50),
-      number_of_bedrooms INTEGER DEFAULT 0 CHECK (number_of_bedrooms >= 0),
-      number_of_kitchens INTEGER DEFAULT 0 CHECK (number_of_kitchens >= 0),
-      number_of_living_rooms INTEGER DEFAULT 0 CHECK (number_of_living_rooms >= 0),
-      number_of_toilets INTEGER DEFAULT 0 CHECK (number_of_toilets >= 0),
-      room_size VARCHAR(100),
-      has_running_water BOOLEAN DEFAULT FALSE,
-      has_electricity BOOLEAN DEFAULT FALSE,
-      has_parking_space BOOLEAN DEFAULT FALSE,
-      has_internet BOOLEAN DEFAULT FALSE,
-      images JSONB,
-      cover_image_url TEXT,
-      description TEXT,
-      apartment_condition VARCHAR(100),
-      furnished_status VARCHAR(100),
-      apartment_type VARCHAR(100),
-      rent_amount NUMERIC(12,2) DEFAULT 0 CHECK (rent_amount >= 0),
-      caution_fee NUMERIC(12,2) DEFAULT 0 CHECK (caution_fee >= 0),
-      lawyer_fee NUMERIC(12,2) DEFAULT 0 CHECK (lawyer_fee >= 0),
-      legal_fees TEXT,
-      payment_duration VARCHAR(50),
-      apartment_status VARCHAR(50) DEFAULT 'available',
-      tenant_eligibility TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      tenant_updated_at TIMESTAMPTZ,
-      deleted_at TIMESTAMPTZ
-    );
+
+
+   await client.query(`
+    CREATE TABLE IF NOT EXISTS property (
+  property_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  house_id UUID REFERENCES houses(id) ON DELETE CASCADE,
+  seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
+  estate_id UUID REFERENCES estates(id) ON DELETE SET NULL,
+  lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
+  buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  reference_code VARCHAR(100) UNIQUE,
+
+  address TEXT,
+  state TEXT,
+  lga TEXT,
+  country TEXT,
+
+  name VARCHAR(255),
+  house_name VARCHAR(255),
+  unit_number VARCHAR(50),
+  property_type PropertyType,
+  quantity NUMERIC(12,2),
+
+  bedrooms INTEGER DEFAULT 0 CHECK (bedrooms >= 0),
+  kitchens INTEGER DEFAULT 0 CHECK (kitchens >= 0),
+  living_rooms INTEGER DEFAULT 0 CHECK (living_rooms >= 0),
+  toilets INTEGER DEFAULT 0 CHECK (toilets >= 0),
+  room_size VARCHAR(100),
+  size TEXT,
+
+  has_running_water BOOLEAN DEFAULT FALSE,
+  has_electricity BOOLEAN DEFAULT FALSE,
+  has_parking_space BOOLEAN DEFAULT FALSE,
+  has_internet BOOLEAN DEFAULT FALSE,
+
+  cover_image_url TEXT,
+  description TEXT,
+
+  price NUMERIC(12,2) DEFAULT 0 CHECK (price >= 0),
+  asking_price NUMERIC(12,2) DEFAULT 0 CHECK (asking_price >= 0),
+  final_sale_price NUMERIC(12,2) DEFAULT 0 CHECK (final_sale_price >= 0),
+  currency VARCHAR(10) DEFAULT 'NGN',
+
+  booking_fee NUMERIC DEFAULT 0,
+  statutory_fee NUMERIC DEFAULT 0,
+  development_fee NUMERIC DEFAULT 0,
+  survey_fee NUMERIC DEFAULT 0,
+  legal_fee NUMERIC DEFAULT 0,
+  documentation_fee NUMERIC DEFAULT 0,
+  agency_fee NUMERIC DEFAULT 0,
+  other_fees NUMERIC DEFAULT 0,
+  caution_fee NUMERIC DEFAULT 0,
+  subscription_fee NUMERIC DEFAULT 0,
+
+  documents_available TEXT,
+  land_type TEXT,
+  topography TEXT,
+  soil_type TEXT,
+  fencing_status TEXT,
+
+  access_road_type TEXT,
+  survey_status TEXT,
+  government_acquisition_status TEXT,
+  usage_status TEXT,
+
+  status VARCHAR(50) DEFAULT 'available',
+  sold_out BOOLEAN DEFAULT FALSE,
+  verification_status BOOLEAN DEFAULT FALSE,
+  is_estate BOOLEAN DEFAULT FALSE,
+
+  condition VARCHAR(100),
+  furnished_status VARCHAR(100),
+  payment_duration VARCHAR(50),
+  eligibility TEXT,
+
+  sold_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
   `);
 
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS land_properties (
-      property_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      estate_id UUID REFERENCES estates(id) ON DELETE SET NULL,
-      seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
-      property_name TEXT NOT NULL,
-      property_address TEXT NOT NULL,
-      state_location TEXT NOT NULL,
-      country TEXT NOT NULL,
-      cover_image_url TEXT,
-      gallery_images JSONB,
-      price NUMERIC(14,2) NOT NULL CHECK (price >= 0),
-      available_quantity NUMERIC NOT NULL CHECK (available_quantity >= 0),
-      short_description TEXT NOT NULL,
-      long_description TEXT NOT NULL,
-      land_size NUMERIC,
-      custom_land_size NUMERIC,
-      price_per_450sqm NUMERIC,
-      price_per_900sqm NUMERIC,
-      price_per_custom_sqm NUMERIC,
-      price_per_plot NUMERIC,
-      booking_fee NUMERIC,
-      statutory_fee NUMERIC,
-      development_fee NUMERIC,
-      survey_fee NUMERIC,
-      legal_fee NUMERIC,
-      documentation_fee NUMERIC,
-      subscription_fee NUMERIC,
-      agency_fee NUMERIC,
-      other_fees NUMERIC,
-      documents_available JSONB,
-      land_type TEXT,
-      topography TEXT,
-      soil_type TEXT,
-      fencing_status TEXT,
-      electricity_availability TEXT,
-      access_road_type TEXT,
-      survey_status TEXT,
-      government_acquisition_status TEXT,
-      usage_status TEXT,
-      status TEXT DEFAULT 'available',
-      is_estate_land BOOLEAN DEFAULT FALSE,
-      sold_out BOOLEAN DEFAULT FALSE,
-      listing_date TIMESTAMPTZ DEFAULT NOW(),
-      purchase_date TIMESTAMPTZ,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `);
  
-  await createHousesForSaleTable(client);
 }
 
 async function ensureImagesTableHotfix(client) {
@@ -830,7 +693,6 @@ const STARTUP_SCHEMA_RECONCILIATION = Object.freeze({
     { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
     { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
   ],
-  houses_for_sale: HOUSES_FOR_SALE_STARTUP_COLUMNS,
   purchase_process_inspection_payments:
     PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS,
   purchase_process_contract_uploads: PURCHASE_PROCESS_CONTRACT_UPLOAD_COLUMNS,
@@ -968,9 +830,7 @@ async function ensureUpdatedAtTrigger(client) {
     "lawyers",
     "estates",
     "houses",
-    "apartments",
-    "land_properties",
-    "houses_for_sale",
+    "property",
     "tenant_meta",
     "finance_accounts",
     "property_orders",
@@ -995,10 +855,10 @@ async function ensureIndexes(client) {
     `CREATE INDEX IF NOT EXISTS idx_estates_seller_id ON estates(seller_id)`,
     `CREATE INDEX IF NOT EXISTS idx_houses_seller_id ON houses(seller_id)`,
     `CREATE INDEX IF NOT EXISTS idx_houses_estate_id ON houses(estate_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_apartments_house_id ON apartments(house_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_apartments_tenant_id ON apartments(tenant_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_land_properties_seller_id ON land_properties(seller_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_houses_for_sale_owner_id ON houses_for_sale(owner_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_property_property_type ON property(property_type)`,
+    `CREATE INDEX IF NOT EXISTS idx_apartments_tenant_id ON property(buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_property_address ON property(address)`,
+    `CREATE INDEX IF NOT EXISTS idx_property_seller_id ON property(seller_id)`,
     `CREATE INDEX IF NOT EXISTS idx_tenant_meta_tenant_id ON tenant_meta(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_finance_accounts_user_id ON finance_accounts(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id)`,
@@ -1036,9 +896,7 @@ export async function initializeDatabaseTablesSafe() {
     await runStep(client, "images table hotfix", async () =>
       ensureImagesTableHotfix(client)
     );
-    await runStep(client, "houses_for_sale table hotfix", async () =>
-      ensureHousesForSaleTableHotfix(client)
-    );
+  
     await runStep(client, "purchase process tables hotfix", async () =>
       ensurePurchaseProcessTablesHotfix(client)
     );
@@ -1055,6 +913,9 @@ export async function initializeDatabaseTablesSafe() {
       console.log("[DB] migration skipped (already applied)");
       return { success: true, skipped: true };
     }
+    await runStep(client, "custom types", async () =>
+  ensureCustomTypes(client)
+);
 
     await runStep(client, "core tables", async () => createCoreTables(client));
     await runStep(client, "property tables", async () =>
