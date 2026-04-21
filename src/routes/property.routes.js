@@ -47,22 +47,24 @@ const adminOnly = [protect, requireRole("admin")];
 router.get("/get", getAllProperties);
 router.get("/available", getAvailableProperties);
 router.get("/search", search);
-
-router.get("/sellerHouseApartments/:sellerId/:houseId", getBySellerHouseProperties)
-router.post("/sellerProperties/:sellerId", validate({ params: sellerIdParamSchema }), getBySellerAndPropertyType);
-router.post("/sellerEstateProperties/:sellerId/:estateId/:propertyType", validate({ params: sellerIdParamSchema }), getEstateProperties);
-router.post("/sellerNonEstateProperties/:sellerId/:propertyType", validate({ params: sellerIdParamSchema }), getNonEstateProperties);
-router.post("/stats/count", countProperties);
 router.get("/list", listProperties);
 router.get("/stats", getPropertiesStats);
-router.get("/:propertyId/:sellerId", validate({ params: propertyIdParamSchema }), getPropertyById);
 
+router.get("/sellerProperties/:sellerId", getSellerProperties);
+router.get("/sellerHouseApartments/:sellerId/:houseId", getBySellerHouseProperties);
+
+router.post("/stats/count", countProperties);
+router.post("/sellerProperties/:sellerId", getBySellerAndPropertyType);
+router.post("/sellerEstateProperties/:sellerId/:estateId/:propertyType", getEstateProperties);
+router.post("/sellerNonEstateProperties/:sellerId/:propertyType", getNonEstateProperties);
+
+router.get("getById/:propertyId/:sellerId", getPropertyById); // always last
 /* ================= PROTECTED WRITE ROUTES ================= */
 protectedRouter.use(protect);
 protectedRouter.delete("/deleteProperty/:sellerId/:propertyId",validate({params: propertyIdParamSchema}) , deleteProperty)
-protectedRouter.post("/", validate({ body: createSchema }), createProperty);
+protectedRouter.post("/create", validate({ body: createSchema }), createProperty);
 protectedRouter.put(
-  "/:propertyId",
+  "/update/:propertyId",
   validate({ params: propertyIdParamSchema }),
   updateProperty
 );
@@ -79,7 +81,7 @@ protectedRouter.post("/bulkInsert", insertMultipleProperties);
 
 /* ================= ADMIN-ONLY MUTATION ROUTES ================= */
 adminRouter.post("/bulk", validate({ body: bulkInsertSchema }), insertMultipleProperties);
-adminRouter.delete("/:propertyId", validate({ params: propertyIdParamSchema }), deleteProperty);
+adminRouter.delete("/delete/:propertyId", validate({ params: propertyIdParamSchema }), deleteProperty);
 adminRouter.delete("/clear/all", clearAllProperties);
 
 router.use(protectedRouter);
