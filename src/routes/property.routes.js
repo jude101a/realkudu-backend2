@@ -21,6 +21,7 @@ import {
   listProperties,
   getBySellerHouseProperties,
   getSellerProperties,
+  getSellerEstateLands,
 
   
  
@@ -65,7 +66,7 @@ protectedRouter.put(
   validate({ params: propertyIdParamSchema }),
   updateProperty
 );
-protectedRouter.get("/sellerEstateLand/:sellerId")
+protectedRouter.get("/sellerEstateLand/:sellerId",getSellerEstateLands)
 
 router.get("/sellerProperties/:sellerId", getSellerProperties)
 
