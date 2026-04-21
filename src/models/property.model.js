@@ -351,7 +351,23 @@ static async softDelete(id, client = null) {
 
    static async findBySellerAndType(sellerId,propertyType) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND property_type = $2 ORDER BY created_at DESC`,
+      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND property_type = $2 AND deleted_at IS NULL ORDER BY created_at DESC`,
+      [sellerId, propertyType]
+    );
+    return rows;
+  }
+
+   static async findSellerEstateLand(sellerId) {
+    const { rows } = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND property_type = land AND is_estate = true AND deleted_at IS NULL ORDER BY created_at DESC`,
+      [sellerId, propertyType]
+    );
+    return rows;
+  }
+
+   static async findBySellerHouseProperties(sellerId,houseId) {
+    const { rows } = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND house_id = $2 AND deleted_at IS NULL ORDER BY created_at DESC`,
       [sellerId, propertyType]
     );
     return rows;
@@ -367,7 +383,7 @@ static async softDelete(id, client = null) {
 
   static async findAvailable({ limit = 50, offset = 0 } = {}) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE sold_out = false ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      `SELECT * FROM ${TABLE} WHERE sold_out = false AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
     return rows;
@@ -375,7 +391,7 @@ static async softDelete(id, client = null) {
 
   static async findEstateLands(sellerId) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND is_estate_land = true ORDER BY created_at DESC`,
+      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND is_estate = true AND property_type = land AND deleted_at IS NULL ORDER BY created_at DESC`,
       [sellerId]
     );
     return rows;

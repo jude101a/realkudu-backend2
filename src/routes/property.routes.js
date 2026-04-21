@@ -19,6 +19,8 @@ import {
   searchProperties,
   getPropertiesStats,
   listProperties,
+  getBySellerHouseProperties,
+  getSellerProperties,
 
   
  
@@ -44,23 +46,28 @@ const adminOnly = [protect, requireRole("admin")];
 router.get("/get", getAllProperties);
 router.get("/available", getAvailableProperties);
 router.get("/search", search);
+
+router.get("/sellerHouseApartments/:sellerId/:houseId", getBySellerHouseProperties)
 router.post("/sellerProperties/:sellerId", validate({ params: sellerIdParamSchema }), getBySellerAndPropertyType);
-router.post("/sellerEstateProperties/:sellerId", validate({ params: sellerIdParamSchema }), getEstateProperties);
-router.post("/sellerNonEstateProperties/:sellerId", validate({ params: sellerIdParamSchema }), getNonEstateProperties);
+router.post("/sellerEstateProperties/:sellerId/:estateId/:propertyType", validate({ params: sellerIdParamSchema }), getEstateProperties);
+router.post("/sellerNonEstateProperties/:sellerId/:propertyType", validate({ params: sellerIdParamSchema }), getNonEstateProperties);
 router.post("/stats/count", countProperties);
 router.get("/list", listProperties);
 router.get("/stats", getPropertiesStats);
-router.get("/:propertyId", validate({ params: propertyIdParamSchema }), getPropertyById);
+router.get("/:propertyId/:sellerId", validate({ params: propertyIdParamSchema }), getPropertyById);
 
 /* ================= PROTECTED WRITE ROUTES ================= */
 protectedRouter.use(protect);
-protectedRouter.delete("/deleteProperty",validate({params: propertyIdParamSchema}) , deleteProperty)
+protectedRouter.delete("/deleteProperty/:sellerId/:propertyId",validate({params: propertyIdParamSchema}) , deleteProperty)
 protectedRouter.post("/", validate({ body: createSchema }), createProperty);
 protectedRouter.put(
   "/:propertyId",
   validate({ params: propertyIdParamSchema }),
   updateProperty
 );
+protectedRouter.get("/sellerEstateLand/:sellerId")
+
+router.get("/sellerProperties/:sellerId", getSellerProperties)
 
 protectedRouter.patch(
   "/coverImageUrl/:propertyId",

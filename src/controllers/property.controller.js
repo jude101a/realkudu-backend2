@@ -224,8 +224,25 @@ export const getBySellerAndPropertyType = wrap(async (req, res) => {
   if (!isUuid(sellerId)) {
     return fail(res, 400, "sellerId must be a valid UUID", "VALIDATION_ERROR");
   }
-  const lands = await PropertyModel.findBySellerAndType(sellerId, propertyType);
-  return ok(res, lands, "Seller  properties retrieved successfully");
+  const properties = await PropertyModel.findBySellerAndType(sellerId, propertyType);
+  return ok(res, properties, "Seller  properties retrieved successfully");
+});
+
+export const getSellerEstateLands = wrap(async (req, res) => {
+  const { sellerId, propertyType } = req.params;
+  if (!isUuid(sellerId)) {
+    return fail(res, 400, "sellerId must be a valid UUID", "VALIDATION_ERROR");
+  }
+  const properties = await PropertyModel.findSellerEstateLand(sellerId, propertyType);
+  return ok(res, properties, "Seller  properties retrieved successfully");
+});
+export const getBySellerHouseProperties = wrap(async (req, res) => {
+  const { sellerId, houseId } = req.params;
+  if (!isUuid(sellerId)) {
+    return fail(res, 400, "sellerId must be a valid UUID", "VALIDATION_ERROR");
+  }
+  const properties = await PropertyModel.findBySellerHouseProperties(sellerId, propertyType);
+  return ok(res, properties, "House  properties retrieved successfully");
 });
 
 export const getNonEstateProperties = wrap(async (req, res) => {
@@ -236,6 +253,16 @@ export const getNonEstateProperties = wrap(async (req, res) => {
   const properties = await PropertyModel.findNonEstatePropertiesBySeller(sellerId);
   return ok(res, properties, " properties retrieved successfully");
 });
+
+export const getSellerProperties = wrap(async (req, res) => {
+  const { sellerId , propertyType} = req.params;
+  if (!isUuid(sellerId)) {
+    return fail(res, 400, "sellerId must be a valid UUID", "VALIDATION_ERROR");
+  }
+  const properties = await PropertyModel.findSellerProperties(sellerId);
+  return ok(res, properties, " properties retrieved successfully");
+});
+
 
 export const updateCoverImageUrl = wrap(async (req, res) => {
   const { propertyId } = req.params;
