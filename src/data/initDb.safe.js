@@ -593,7 +593,7 @@ async function createPropertyTables(client) {
   name VARCHAR(255),
   house_name VARCHAR(255),
   unit_number VARCHAR(50),
-  property_type PropertyType,
+  property_type TEXT,
   quantity NUMERIC(12,2),
 
   bedrooms INTEGER DEFAULT 0 CHECK (bedrooms >= 0),
