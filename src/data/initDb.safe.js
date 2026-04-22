@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v1";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v2";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v3";
 
 
 
@@ -629,15 +629,15 @@ async function createPropertyTables(client) {
   subscription_fee NUMERIC DEFAULT 0,
 
   documents_available TEXT,
-  land_type TEXT,
-  topography TEXT,
-  soil_type TEXT,
-  fencing_status TEXT,
+  land_type TEXT DEFAULT '',
+  topography TEXT DEFAULT '',
+  soil_type TEXT DEFAULT '',
+  fencing_status TEXT DEFAULT '',
 
-  access_road_type TEXT,
-  survey_status TEXT,
-  government_acquisition_status TEXT,
-  usage_status TEXT,
+  access_road_type TEXT DEFAULT '',
+  survey_status TEXT DEFAULT '',
+  government_acquisition_status TEXT DEFAULT '',
+  usage_status TEXT DEFAULT '',
 
   status VARCHAR(50) DEFAULT 'available',
   sold_out BOOLEAN DEFAULT FALSE,
@@ -647,7 +647,7 @@ async function createPropertyTables(client) {
   condition VARCHAR(100),
   furnished_status VARCHAR(100),
   payment_duration VARCHAR(50),
-  eligibility TEXT,
+  eligibility TEXT DEFAULT '',
 
   sold_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
