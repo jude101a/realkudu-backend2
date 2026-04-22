@@ -8,7 +8,7 @@ const TABLE = "property";
 
 
 const SORT_FIELDS = Object.freeze({
-  house_id: "house_id",
+  property_id: "property_id",
   asking_price: "asking_price",
   created_at: "created_at",
   address: "address",
@@ -17,18 +17,47 @@ const SORT_FIELDS = Object.freeze({
   updated_at: "updated_at",
 });
 
-const mapPayloadToDb = (payload = {}) => {
+const normalizePropertyType = (value) => {
+  switch (value) {
+    case "houseForSale":
+      return "house";
+    case "house":
+      return "house";
+    case "land":
+      return "land";
+    case "apartment":
+      return "apartment";
+    default:
+      return "house";
+  }
+};
+
+export const mapPayloadToDb = (payload = {}) => {
   const mapped = {};
-  for (const [k, v] of Object.entries(payload)) {
-    if (v === undefined) continue;
-    const column = FIELD_MAP[k] || k;
-    if (( column === "cover_image_url") && v !== null) {
-      mapped[column] =
-        typeof v === "string" ? v : JSON.stringify(v);
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === undefined) continue;
+
+    const column = FIELD_MAP[key];
+
+    // 🚨 STRICT MODE: ignore unknown fields instead of corrupting SQL
+    if (!column) continue;
+
+    // normalize enums
+    if (key === "propertyType") {
+      mapped[column] = normalizePropertyType(value);
       continue;
     }
-    mapped[column] = v;
+
+    // clean boolean safety
+    if (typeof value === "string" && (value === "true" || value === "false")) {
+      mapped[column] = value === "true";
+      continue;
+    }
+
+    mapped[column] = value;
   }
+
   return mapped;
 };
 
@@ -62,7 +91,7 @@ const buildFilters = (filters = {}, startIndex = 1) => {
     values.push(filters.bedrooms);
   }
   if (filters.propertyType !== undefined){
-    conditions.push(`propertyType = $${idx++}`);
+    conditions.push(`property_type = $${idx++}`);
     values.push(filters.propertyType);
   }
   if (filters.lga !== undefined){
