@@ -602,6 +602,7 @@ async function createPropertyTables(client) {
   toilets INTEGER DEFAULT 0 CHECK (toilets >= 0),
   room_size VARCHAR(100),
   size TEXT,
+  floors INTEGER DEFAULT 0 CHECK (floors >=0),
 
   has_running_water BOOLEAN DEFAULT FALSE,
   has_electricity BOOLEAN DEFAULT FALSE,

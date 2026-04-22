@@ -61,28 +61,39 @@ router.post("/sellerNonEstateProperties/:sellerId/:propertyType", getNonEstatePr
 router.get("getById/:propertyId/:sellerId", getPropertyById); // always last
 /* ================= PROTECTED WRITE ROUTES ================= */
 protectedRouter.use(protect);
-protectedRouter.delete("/deleteProperty/:sellerId/:propertyId",validate({params: propertyIdParamSchema}) , deleteProperty)
-protectedRouter.post("/create", validate({ body: createSchema }), createProperty);
-protectedRouter.put(
+router.delete("/deleteProperty/:sellerId/:propertyId",validate({params: propertyIdParamSchema}) , deleteProperty)
+router.post("/create",
+  
+  // validate({ body: createSchema }),
+  
+  createProperty);
+router.put(
   "/update/:propertyId",
-  validate({ params: propertyIdParamSchema }),
+
+  // validate({ params: propertyIdParamSchema }),
+
   updateProperty
 );
-protectedRouter.get("/sellerEstateLand/:sellerId",getSellerEstateLands)
+router.get("/sellerEstateLand/:sellerId",getSellerEstateLands)
 
 router.get("/sellerProperties/:sellerId", getSellerProperties)
 
-protectedRouter.patch(
+router.patch(
   "/coverImageUrl/:propertyId",
-  validate({ params: propertyIdParamSchema, }),
+  validate(
+    // { params: propertyIdParamSchema, }
+  ),
+    
   updateCoverImageUrl
 );
-protectedRouter.post("/bulkInsert", insertMultipleProperties);
+router.post("/bulkInsert", insertMultipleProperties);
 
 /* ================= ADMIN-ONLY MUTATION ROUTES ================= */
-adminRouter.post("/bulk", validate({ body: bulkInsertSchema }), insertMultipleProperties);
-adminRouter.delete("/delete/:propertyId", validate({ params: propertyIdParamSchema }), deleteProperty);
-adminRouter.delete("/clear/all", clearAllProperties);
+router.post("/bulk",
+  //  validate({ body: bulkInsertSchema }), 
+   insertMultipleProperties);
+router.delete("/delete/:propertyId", validate({ params: propertyIdParamSchema }), deleteProperty);
+router.delete("/clear/all", clearAllProperties);
 
 router.use(protectedRouter);
 router.use(adminOnly, adminRouter);
