@@ -1,47 +1,10 @@
 import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v1";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v3";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v5";
 
 
 
-const HOUSES_FOR_SALE_STARTUP_COLUMNS = Object.freeze([
-  { name: "owner_id", typeSql: "UUID" },
-  { name: "agent_id", typeSql: "UUID" },
-  { name: "lawyer_id", typeSql: "UUID" },
-  { name: "buyer_id", typeSql: "UUID" },
-  { name: "status", typeSql: "TEXT" },
-  { name: "verification_status", typeSql: "TEXT" },
-  { name: "state", typeSql: "TEXT" },
-  { name: "lga", typeSql: "TEXT" },
-  { name: "address", typeSql: "TEXT" },
-  { name: "landmark", typeSql: "TEXT" },
-  { name: "latitude", typeSql: "NUMERIC" },
-  { name: "longitude", typeSql: "NUMERIC" },
-  { name: "bedrooms", typeSql: "INTEGER" },
-  { name: "bathrooms", typeSql: "INTEGER" },
-  { name: "toilets", typeSql: "INTEGER" },
-  { name: "floors", typeSql: "INTEGER" },
-  { name: "land_size", typeSql: "NUMERIC" },
-  { name: "house_type", typeSql: "TEXT" },
-  { name: "asking_price", typeSql: "NUMERIC(14,2)" },
-  { name: "final_sale_price", typeSql: "NUMERIC(14,2)" },
-  { name: "currency", typeSql: "TEXT", defaultSql: "'NGN'" },
-  { name: "title_document", typeSql: "TEXT" },
-  { name: "has_survey_plan", typeSql: "BOOLEAN", defaultSql: "FALSE" },
-  { name: "has_building_approval", typeSql: "BOOLEAN", defaultSql: "FALSE" },
-  {
-    name: "governor_consent_obtained",
-    typeSql: "BOOLEAN",
-    defaultSql: "FALSE",
-  },
-  { name: "description", typeSql: "TEXT" },
-  { name: "features", typeSql: "TEXT" },
-  { name: "images", typeSql: "TEXT" },
-  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
-  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
-  { name: "sold_at", typeSql: "TIMESTAMPTZ" },
-]);
 
 const PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS = Object.freeze([
   { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
@@ -576,13 +539,17 @@ async function createPropertyTables(client) {
 
 
    await client.query(`
-    CREATE TABLE IF NOT EXISTS property (
+   CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS properties (
   property_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  house_id UUID REFERENCES houses(id) ON DELETE CASCADE,
-  seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
-  estate_id UUID REFERENCES estates(id) ON DELETE SET NULL,
-  lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
-  buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+
+  house_id UUID,
+  seller_id UUID,
+  estate_id UUID,
+  lawyer_id UUID,
+  buyer_id UUID,
+
   reference_code VARCHAR(100) UNIQUE,
 
   address TEXT,
@@ -594,15 +561,15 @@ async function createPropertyTables(client) {
   house_name VARCHAR(255),
   unit_number VARCHAR(50),
   property_type TEXT,
-  quantity NUMERIC(12,2),
+  quantity NUMERIC(12,2) DEFAULT 0,
 
   bedrooms INTEGER DEFAULT 0 CHECK (bedrooms >= 0),
   kitchens INTEGER DEFAULT 0 CHECK (kitchens >= 0),
   living_rooms INTEGER DEFAULT 0 CHECK (living_rooms >= 0),
   toilets INTEGER DEFAULT 0 CHECK (toilets >= 0),
   room_size VARCHAR(100),
-  size TEXT,
-  floors INTEGER DEFAULT 0 CHECK (floors >=0),
+  size NUMERIC,
+  floors INTEGER DEFAULT 0 CHECK (floors >= 0),
 
   has_running_water BOOLEAN DEFAULT FALSE,
   has_electricity BOOLEAN DEFAULT FALSE,
@@ -652,7 +619,13 @@ async function createPropertyTables(client) {
   sold_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ
+  deleted_at TIMESTAMPTZ,
+
+  FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
+  FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE SET NULL,
+  FOREIGN KEY (estate_id) REFERENCES estates(id) ON DELETE SET NULL,
+  FOREIGN KEY (lawyer_id) REFERENCES lawyers(id) ON DELETE SET NULL,
+  FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE SET NULL
 );
   `);
 
@@ -909,6 +882,14 @@ export async function initializeDatabaseTablesSafe() {
       ensureNotificationTables(client)
     );
 
+
+    await runStep(client, "core tables", async () => createCoreTables(client));
+
+    await runStep(client, "property tables", async () =>
+      createPropertyTables(client),
+    console.log('properties table created ')
+    );
+
     if (await alreadyApplied(client)) {
       await client.query("COMMIT");
       console.log("[DB] migration skipped (already applied)");
@@ -918,10 +899,8 @@ export async function initializeDatabaseTablesSafe() {
   ensureCustomTypes(client)
 );
 
-    await runStep(client, "core tables", async () => createCoreTables(client));
-    await runStep(client, "property tables", async () =>
-      createPropertyTables(client)
-    );
+    
+    
     await runStep(client, "finance and ops tables", async () =>
       createFinanceAndOpsTables(client)
     );
