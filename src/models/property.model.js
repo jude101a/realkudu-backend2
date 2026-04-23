@@ -212,7 +212,7 @@ class PropertyModel {
 
   static async findBySeller(sellerId) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE seller_id = $1 ORDER BY created_at DESC`,
+      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND deleted_at IS NULL AND sold_out IS NULL ORDER BY created_at DESC`,
       [sellerId]
     );
     return rows;
@@ -220,7 +220,7 @@ class PropertyModel {
 
   static async findSellerProperties(sellerId) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND deleted_at = null AND sold_out = false ORDER BY created_at DESC`,
+      `SELECT * FROM ${TABLE} WHERE seller_id = $1 AND deleted_at IS NULL AND sold_out IS NULL ORDER BY created_at DESC`,
       [sellerId]
     );
     return rows;
@@ -228,7 +228,7 @@ class PropertyModel {
 
   static async findAvailable({ limit = 50, offset = 0 } = {}) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${TABLE} WHERE sold_out = false AND deleted_t = null ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      `SELECT * FROM ${TABLE} WHERE sold_out IS NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
     return rows;
@@ -239,7 +239,7 @@ class PropertyModel {
     const { rows } = await pool.query(
       `
         SELECT * FROM ${TABLE}
-        WHERE deleted_at = null AND ${where.conditions.join(" AND ")}
+        WHERE deleted_at IS NULL AND ${where.conditions.join(" AND ")}
         ORDER BY created_at DESC
         LIMIT $${where.values.length + 1} OFFSET $${where.values.length + 2}
       `,
