@@ -41,6 +41,85 @@ const PURCHASE_PROCESS_CONTRACT_UPLOAD_COLUMNS = Object.freeze([
   { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
 ]);
 
+const PROPERTY_TABLE_COLUMNS = Object.freeze([
+  { name: "property_id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
+  { name: "house_id", typeSql: "UUID" },
+  { name: "seller_id", typeSql: "UUID" },
+  { name: "estate_id", typeSql: "UUID" },
+  { name: "lawyer_id", typeSql: "UUID" },
+  { name: "buyer_id", typeSql: "UUID" },
+  { name: "reference_code", typeSql: "VARCHAR(100)" },
+  { name: "address", typeSql: "TEXT" },
+  { name: "state", typeSql: "TEXT" },
+  { name: "lga", typeSql: "TEXT" },
+  { name: "country", typeSql: "TEXT" },
+  { name: "name", typeSql: "VARCHAR(255)" },
+  { name: "house_name", typeSql: "VARCHAR(255)" },
+  { name: "unit_number", typeSql: "VARCHAR(50)" },
+  { name: "property_type", typeSql: "TEXT" },
+  { name: "quantity", typeSql: "NUMERIC(12,2)", defaultSql: "0" },
+  { name: "bedrooms", typeSql: "INTEGER", defaultSql: "0" },
+  { name: "kitchens", typeSql: "INTEGER", defaultSql: "0" },
+  { name: "living_rooms", typeSql: "INTEGER", defaultSql: "0" },
+  { name: "toilets", typeSql: "INTEGER", defaultSql: "0" },
+  { name: "room_size", typeSql: "VARCHAR(100)" },
+  { name: "size", typeSql: "NUMERIC" },
+  { name: "floors", typeSql: "INTEGER", defaultSql: "0" },
+  { name: "has_running_water", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "has_electricity", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "has_parking_space", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "has_internet", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "cover_image_url", typeSql: "TEXT" },
+  { name: "description", typeSql: "TEXT" },
+  { name: "price", typeSql: "NUMERIC(12,2)", defaultSql: "0" },
+  { name: "asking_price", typeSql: "NUMERIC(12,2)", defaultSql: "0" },
+  { name: "final_sale_price", typeSql: "NUMERIC(12,2)", defaultSql: "0" },
+  { name: "currency", typeSql: "VARCHAR(10)", defaultSql: "'NGN'" },
+  { name: "booking_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "statutory_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "development_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "survey_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "legal_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "documentation_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "agency_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "other_fees", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "caution_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "subscription_fee", typeSql: "NUMERIC", defaultSql: "0" },
+  { name: "documents_available", typeSql: "TEXT" },
+  { name: "land_type", typeSql: "TEXT", defaultSql: "''" },
+  { name: "topography", typeSql: "TEXT", defaultSql: "''" },
+  { name: "soil_type", typeSql: "TEXT", defaultSql: "''" },
+  { name: "fencing_status", typeSql: "TEXT", defaultSql: "''" },
+  { name: "access_road_type", typeSql: "TEXT", defaultSql: "''" },
+  { name: "survey_status", typeSql: "TEXT", defaultSql: "''" },
+  { name: "government_acquisition_status", typeSql: "TEXT", defaultSql: "''" },
+  { name: "usage_status", typeSql: "TEXT", defaultSql: "''" },
+  { name: "status", typeSql: "VARCHAR(50)", defaultSql: "'available'" },
+  { name: "sold_out", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "verification_status", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "is_estate", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "condition", typeSql: "VARCHAR(100)" },
+  { name: "furnished_status", typeSql: "VARCHAR(100)" },
+  { name: "payment_duration", typeSql: "VARCHAR(50)" },
+  { name: "eligibility", typeSql: "TEXT", defaultSql: "''" },
+  { name: "sold_at", typeSql: "TIMESTAMPTZ" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
+]);
+
+const PROPERTY_TABLE_INDEXES = Object.freeze([
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_property_reference_code ON property(reference_code) WHERE reference_code IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_property_property_type ON property(property_type)`,
+  `CREATE INDEX IF NOT EXISTS idx_apartments_tenant_id ON property(buyer_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_property_address ON property(address)`,
+  `CREATE INDEX IF NOT EXISTS idx_property_seller_id ON property(seller_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_property_deleted_at ON property(deleted_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_property_status ON property(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_property_state_lga ON property(state, lga)`,
+  `CREATE INDEX IF NOT EXISTS idx_property_seller_type_created_at ON property(seller_id, property_type, created_at DESC)`,
+]);
+
 async function runStep(client, name, fn) {
   try {
     await fn();
@@ -301,6 +380,97 @@ async function ensurePurchaseProcessTablesHotfix(client) {
   await ensurePurchaseProcessIndexes(client);
 }
 
+async function ensurePropertyTableForeignKeys(client) {
+  if (!(await doesTableExist(client, "property"))) {
+    return;
+  }
+
+  if (await doesTableExist(client, "houses")) {
+    await ensureForeignKeyConstraint(
+      client,
+      "property",
+      "house_id",
+      "fk_property_house_id_houses",
+      `FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE`,
+      (definition) => {
+        const normalized = String(definition || "").toLowerCase();
+        return (
+          normalized.includes("foreign key (house_id) references houses(id)") &&
+          normalized.includes("on delete cascade")
+        );
+      }
+    );
+  }
+
+  if (await doesTableExist(client, "sellers")) {
+    await ensureForeignKeyConstraint(
+      client,
+      "property",
+      "seller_id",
+      "fk_property_seller_id_sellers",
+      `FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE SET NULL`,
+      (definition) => {
+        const normalized = String(definition || "").toLowerCase();
+        return (
+          normalized.includes("foreign key (seller_id) references sellers(id)") &&
+          normalized.includes("on delete set null")
+        );
+      }
+    );
+  }
+
+  if (await doesTableExist(client, "estates")) {
+    await ensureForeignKeyConstraint(
+      client,
+      "property",
+      "estate_id",
+      "fk_property_estate_id_estates",
+      `FOREIGN KEY (estate_id) REFERENCES estates(id) ON DELETE SET NULL`,
+      (definition) => {
+        const normalized = String(definition || "").toLowerCase();
+        return (
+          normalized.includes("foreign key (estate_id) references estates(id)") &&
+          normalized.includes("on delete set null")
+        );
+      }
+    );
+  }
+
+  if (await doesTableExist(client, "lawyers")) {
+    await ensureForeignKeyConstraint(
+      client,
+      "property",
+      "lawyer_id",
+      "fk_property_lawyer_id_lawyers",
+      `FOREIGN KEY (lawyer_id) REFERENCES lawyers(id) ON DELETE SET NULL`,
+      (definition) => {
+        const normalized = String(definition || "").toLowerCase();
+        return (
+          normalized.includes("foreign key (lawyer_id) references lawyers(id)") &&
+          normalized.includes("on delete set null")
+        );
+      }
+    );
+  }
+
+  if (await doesTableExist(client, "users")) {
+    await ensureForeignKeyConstraint(
+      client,
+      "property",
+      "buyer_id",
+      "fk_property_buyer_id_users",
+      `FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE SET NULL`,
+      (definition) => {
+        const normalized = String(definition || "").toLowerCase();
+        return (
+          normalized.includes("foreign key (buyer_id) references users(id)") &&
+          normalized.includes("on delete set null")
+        );
+      }
+    );
+  }
+}
+
 async function createCoreTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -536,100 +706,86 @@ async function createPropertyTables(client) {
     );
   `);
 
+  await ensurePropertyTableHotfix(client);
+}
 
-
-   await client.query(`
-   CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-CREATE TABLE IF NOT EXISTS properties (
-  property_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-  house_id UUID,
-  seller_id UUID,
-  estate_id UUID,
-  lawyer_id UUID,
-  buyer_id UUID,
-
-  reference_code VARCHAR(100) UNIQUE,
-
-  address TEXT,
-  state TEXT,
-  lga TEXT,
-  country TEXT,
-
-  name VARCHAR(255),
-  house_name VARCHAR(255),
-  unit_number VARCHAR(50),
-  property_type TEXT,
-  quantity NUMERIC(12,2) DEFAULT 0,
-
-  bedrooms INTEGER DEFAULT 0 CHECK (bedrooms >= 0),
-  kitchens INTEGER DEFAULT 0 CHECK (kitchens >= 0),
-  living_rooms INTEGER DEFAULT 0 CHECK (living_rooms >= 0),
-  toilets INTEGER DEFAULT 0 CHECK (toilets >= 0),
-  room_size VARCHAR(100),
-  size NUMERIC,
-  floors INTEGER DEFAULT 0 CHECK (floors >= 0),
-
-  has_running_water BOOLEAN DEFAULT FALSE,
-  has_electricity BOOLEAN DEFAULT FALSE,
-  has_parking_space BOOLEAN DEFAULT FALSE,
-  has_internet BOOLEAN DEFAULT FALSE,
-
-  cover_image_url TEXT,
-  description TEXT,
-
-  price NUMERIC(12,2) DEFAULT 0 CHECK (price >= 0),
-  asking_price NUMERIC(12,2) DEFAULT 0 CHECK (asking_price >= 0),
-  final_sale_price NUMERIC(12,2) DEFAULT 0 CHECK (final_sale_price >= 0),
-  currency VARCHAR(10) DEFAULT 'NGN',
-
-  booking_fee NUMERIC DEFAULT 0,
-  statutory_fee NUMERIC DEFAULT 0,
-  development_fee NUMERIC DEFAULT 0,
-  survey_fee NUMERIC DEFAULT 0,
-  legal_fee NUMERIC DEFAULT 0,
-  documentation_fee NUMERIC DEFAULT 0,
-  agency_fee NUMERIC DEFAULT 0,
-  other_fees NUMERIC DEFAULT 0,
-  caution_fee NUMERIC DEFAULT 0,
-  subscription_fee NUMERIC DEFAULT 0,
-
-  documents_available TEXT,
-  land_type TEXT DEFAULT '',
-  topography TEXT DEFAULT '',
-  soil_type TEXT DEFAULT '',
-  fencing_status TEXT DEFAULT '',
-
-  access_road_type TEXT DEFAULT '',
-  survey_status TEXT DEFAULT '',
-  government_acquisition_status TEXT DEFAULT '',
-  usage_status TEXT DEFAULT '',
-
-  status VARCHAR(50) DEFAULT 'available',
-  sold_out BOOLEAN DEFAULT FALSE,
-  verification_status BOOLEAN DEFAULT FALSE,
-  is_estate BOOLEAN DEFAULT FALSE,
-
-  condition VARCHAR(100),
-  furnished_status VARCHAR(100),
-  payment_duration VARCHAR(50),
-  eligibility TEXT DEFAULT '',
-
-  sold_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ,
-
-  FOREIGN KEY (house_id) REFERENCES houses(id) ON DELETE CASCADE,
-  FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE SET NULL,
-  FOREIGN KEY (estate_id) REFERENCES estates(id) ON DELETE SET NULL,
-  FOREIGN KEY (lawyer_id) REFERENCES lawyers(id) ON DELETE SET NULL,
-  FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE SET NULL
-);
+async function ensurePropertyTableHotfix(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS property (
+      property_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      house_id UUID,
+      seller_id UUID,
+      estate_id UUID,
+      lawyer_id UUID,
+      buyer_id UUID,
+      reference_code VARCHAR(100),
+      address TEXT,
+      state TEXT,
+      lga TEXT,
+      country TEXT,
+      name VARCHAR(255),
+      house_name VARCHAR(255),
+      unit_number VARCHAR(50),
+      property_type TEXT,
+      quantity NUMERIC(12,2) DEFAULT 0,
+      bedrooms INTEGER DEFAULT 0 CHECK (bedrooms >= 0),
+      kitchens INTEGER DEFAULT 0 CHECK (kitchens >= 0),
+      living_rooms INTEGER DEFAULT 0 CHECK (living_rooms >= 0),
+      toilets INTEGER DEFAULT 0 CHECK (toilets >= 0),
+      room_size VARCHAR(100),
+      size NUMERIC,
+      floors INTEGER DEFAULT 0 CHECK (floors >= 0),
+      has_running_water BOOLEAN DEFAULT FALSE,
+      has_electricity BOOLEAN DEFAULT FALSE,
+      has_parking_space BOOLEAN DEFAULT FALSE,
+      has_internet BOOLEAN DEFAULT FALSE,
+      cover_image_url TEXT,
+      description TEXT,
+      price NUMERIC(12,2) DEFAULT 0 CHECK (price >= 0),
+      asking_price NUMERIC(12,2) DEFAULT 0 CHECK (asking_price >= 0),
+      final_sale_price NUMERIC(12,2) DEFAULT 0 CHECK (final_sale_price >= 0),
+      currency VARCHAR(10) DEFAULT 'NGN',
+      booking_fee NUMERIC DEFAULT 0,
+      statutory_fee NUMERIC DEFAULT 0,
+      development_fee NUMERIC DEFAULT 0,
+      survey_fee NUMERIC DEFAULT 0,
+      legal_fee NUMERIC DEFAULT 0,
+      documentation_fee NUMERIC DEFAULT 0,
+      agency_fee NUMERIC DEFAULT 0,
+      other_fees NUMERIC DEFAULT 0,
+      caution_fee NUMERIC DEFAULT 0,
+      subscription_fee NUMERIC DEFAULT 0,
+      documents_available TEXT,
+      land_type TEXT DEFAULT '',
+      topography TEXT DEFAULT '',
+      soil_type TEXT DEFAULT '',
+      fencing_status TEXT DEFAULT '',
+      access_road_type TEXT DEFAULT '',
+      survey_status TEXT DEFAULT '',
+      government_acquisition_status TEXT DEFAULT '',
+      usage_status TEXT DEFAULT '',
+      status VARCHAR(50) DEFAULT 'available',
+      sold_out BOOLEAN DEFAULT FALSE,
+      verification_status BOOLEAN DEFAULT FALSE,
+      is_estate BOOLEAN DEFAULT FALSE,
+      condition VARCHAR(100),
+      furnished_status VARCHAR(100),
+      payment_duration VARCHAR(50),
+      eligibility TEXT DEFAULT '',
+      sold_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ
+    );
   `);
 
- 
+  await ensureTableColumns(client, "property", PROPERTY_TABLE_COLUMNS);
+  await ensurePropertyTableForeignKeys(client);
+  await ensureUpdatedAtTriggerForTable(client, "property");
+
+  for (const statement of PROPERTY_TABLE_INDEXES) {
+    await client.query(statement);
+  }
 }
 
 async function ensureImagesTableHotfix(client) {
@@ -829,10 +985,7 @@ async function ensureIndexes(client) {
     `CREATE INDEX IF NOT EXISTS idx_estates_seller_id ON estates(seller_id)`,
     `CREATE INDEX IF NOT EXISTS idx_houses_seller_id ON houses(seller_id)`,
     `CREATE INDEX IF NOT EXISTS idx_houses_estate_id ON houses(estate_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_property_property_type ON property(property_type)`,
-    `CREATE INDEX IF NOT EXISTS idx_apartments_tenant_id ON property(buyer_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_property_address ON property(address)`,
-    `CREATE INDEX IF NOT EXISTS idx_property_seller_id ON property(seller_id)`,
+    ...PROPERTY_TABLE_INDEXES,
     `CREATE INDEX IF NOT EXISTS idx_tenant_meta_tenant_id ON tenant_meta(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_finance_accounts_user_id ON finance_accounts(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id)`,
@@ -874,20 +1027,15 @@ export async function initializeDatabaseTablesSafe() {
     await runStep(client, "purchase process tables hotfix", async () =>
       ensurePurchaseProcessTablesHotfix(client)
     );
-    await runStep(client, "startup schema reconciliation", async () =>
-      ensureStartupSchemaReconciliation(client)
-    );
 
     await runStep(client, "ensure notification tables", async () =>
       ensureNotificationTables(client)
     );
 
-
     await runStep(client, "core tables", async () => createCoreTables(client));
-
-    await runStep(client, "property tables", async () =>
-      createPropertyTables(client),
-    console.log('properties table created ')
+    await runStep(client, "property tables", async () => createPropertyTables(client));
+    await runStep(client, "startup schema reconciliation", async () =>
+      ensureStartupSchemaReconciliation(client)
     );
 
     if (await alreadyApplied(client)) {
@@ -896,11 +1044,8 @@ export async function initializeDatabaseTablesSafe() {
       return { success: true, skipped: true };
     }
     await runStep(client, "custom types", async () =>
-  ensureCustomTypes(client)
-);
-
-    
-    
+      ensureCustomTypes(client)
+    );
     await runStep(client, "finance and ops tables", async () =>
       createFinanceAndOpsTables(client)
     );
