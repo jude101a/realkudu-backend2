@@ -64,6 +64,11 @@ export const FIELD_MAP = Object.freeze({
   topography: "topography",
   soilType: "soil_type",
   fencingStatus: "fencing_status",
+  pricePerPlot: "price_per_plot",
+  pricePer450sqm : "price_per_450sqm" ,
+  pricePer900sqm :"price_per_900sqm" ,
+  pricePerCustomsqm: "price_per_customsqm",
+  customSize: "custom_size",
 
   // access / legal / usage
   accessRoadType: "access_road_type",

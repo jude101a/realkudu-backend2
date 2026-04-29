@@ -62,120 +62,252 @@ const protectedRouter = Router();
 const adminRouter = Router();
 const adminOnly = [protect, requireRole("admin")];
 
-// Public read routes
+// ===============================
+// PUBLIC READ ROUTES
+// Put fixed/static routes first
+// Dynamic :id routes last
+// ===============================
+
 router.get("/", validate({ query: sellerListQuerySchema }), getAllSellers);
-router.get("/search", validate({ query: sellerSearchQuerySchema }), searchSellers);
+
+router.get(
+  "/search",
+  validate({ query: sellerSearchQuerySchema }),
+  searchSellers
+);
+
 router.get("/verified", getVerifiedSellers);
+
 router.get("/top-rated", getTopRatedSellers);
+
+// auth/public action
+router.post(
+  "/login/:id",
+  validate({ params: sellerIdParamSchema }),
+  loginSeller
+);
+
+// nested dynamic route before plain /:id
 router.get(
   "/:id/properties",
-  validate({ params: sellerIdParamSchema, query: sellerPropertyListingQuerySchema }),
+  validate({
+    params: sellerIdParamSchema,
+    query: sellerPropertyListingQuerySchema,
+  }),
   getSellerPropertyListings
 );
-router.get("/:id", validate({ params: sellerIdParamSchema }), getSeller);
-router.post("/login/:id", loginSeller);
 
-// Protected user routes
+// plain dynamic route LAST
+router.get(
+  "/:id",
+  validate({ params: sellerIdParamSchema }),
+  getSeller
+);
+
+
+
+// ===============================
+// PROTECTED USER ROUTES
+// Static first, dynamic last
+// ===============================
+
 protectedRouter.use(protect);
+
+// auth
+protectedRouter.post(
+  "/login",
+  validate({ body: sellerUserLoginSchema }),
+  loginSeller
+);
+
+// register
 protectedRouter.post(
   "/register/individual",
   validate({ body: registerIndividualSellerSchema }),
   registerIndividualSeller
 );
+
 protectedRouter.post(
   "/register/company",
   validate({ body: registerCompanySellerSchema }),
   registerCompanySeller
 );
-protectedRouter.post("/login", validate({ body: sellerUserLoginSchema }), loginSeller);
 
+// explicit named routes first
 protectedRouter.get(
   "/user/:userId",
   validate({ params: userIdParamSchema }),
   getSellerWithUserId
 );
+
+// dynamic nested routes
 protectedRouter.get(
   "/:id/profile-completion",
   validate({ params: sellerIdParamSchema }),
   getProfileCompletion
 );
+
 protectedRouter.get(
   "/:id/can-list-properties",
   validate({ params: sellerIdParamSchema }),
   checkCanListProperties
 );
 
+// updates
 protectedRouter.put(
   "/:id/profile",
-  validate({ params: sellerIdParamSchema, body: updateBusinessProfileSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: updateBusinessProfileSchema,
+  }),
   updateBusinessProfile
 );
-protectedRouter.put("/:id/banking", updateBankingDetails);
+
+protectedRouter.put(
+  "/:id/banking",
+  validate({ params: sellerIdParamSchema }),
+  updateBankingDetails
+);
+
 protectedRouter.put(
   "/:id/kyc/individual",
-  validate({ params: sellerIdParamSchema, body: updateIndividualKycSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: updateIndividualKycSchema,
+  }),
   updateIndividualKYC
 );
+
 protectedRouter.put(
   "/:id/kyc/company",
-  validate({ params: sellerIdParamSchema, body: updateCompanyDocumentsSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: updateCompanyDocumentsSchema,
+  }),
   updateCompanyDocuments
 );
-protectedRouter.put("/:id/terms", updateTermsAcceptance);
 
-protectedRouter.post("/:id/gallery", addGalleryImage);
-protectedRouter.delete("/:id/gallery/:imageUrl", removeGalleryImage);
+protectedRouter.put(
+  "/:id/terms",
+  validate({ params: sellerIdParamSchema }),
+  updateTermsAcceptance
+);
 
-// Admin routes
-adminRouter.get("/analytics/counts-by-status", getCountsByStatus);
-adminRouter.get("/analytics/counts-by-verification", getCountsByVerificationStatus);
-adminRouter.get("/analytics/counts-by-type", getCountsByType);
-adminRouter.get("/analytics/total-statistics", getTotalStatistics);
+// gallery
+protectedRouter.post(
+  "/:id/gallery",
+  validate({ params: sellerIdParamSchema }),
+  addGalleryImage
+);
 
+protectedRouter.delete(
+  "/:id/gallery/:imageUrl",
+  validate({ params: sellerIdParamSchema }),
+  removeGalleryImage
+);
+
+
+
+// ===============================
+// ADMIN ROUTES
+// Fixed analytics first
+// Dynamic :id actions after
+// ===============================
+
+adminRouter.get(
+  "/analytics/counts-by-status",
+  getCountsByStatus
+);
+
+adminRouter.get(
+  "/analytics/counts-by-verification",
+  getCountsByVerificationStatus
+);
+
+adminRouter.get(
+  "/analytics/counts-by-type",
+  getCountsByType
+);
+
+adminRouter.get(
+  "/analytics/total-statistics",
+  getTotalStatistics
+);
+
+// dynamic actions
 adminRouter.put(
   "/:id/ratings",
-  validate({ params: sellerIdParamSchema, body: adminUpdateRatingsSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: adminUpdateRatingsSchema,
+  }),
   updateSellerRatings
 );
+
 adminRouter.post(
   "/:id/verify",
-  validate({ params: sellerIdParamSchema, body: adminVerifySellerSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: adminVerifySellerSchema,
+  }),
   verifySeller
 );
+
 adminRouter.post(
   "/:id/reject",
-  validate({ params: sellerIdParamSchema, body: adminRejectSellerSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: adminRejectSellerSchema,
+  }),
   rejectSeller
 );
+
 adminRouter.post(
   "/:id/suspend",
-  validate({ params: sellerIdParamSchema, body: adminSuspendSellerSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: adminSuspendSellerSchema,
+  }),
   suspendSeller
 );
+
 adminRouter.post(
   "/:id/deactivate",
-  validate({ params: sellerIdParamSchema, body: adminDeactivateSellerSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: adminDeactivateSellerSchema,
+  }),
   deactivateSeller
 );
+
 adminRouter.post(
   "/:id/reactivate",
   validate({ params: sellerIdParamSchema }),
   reactivateSeller
 );
+
 adminRouter.post(
   "/:id/certify",
   validate({ params: sellerIdParamSchema }),
   certifySeller
 );
-adminRouter.delete(
-  "/:id",
-  validate({ params: sellerIdParamSchema, body: adminDeleteSellerSchema }),
-  deleteSeller
-);
+
 adminRouter.post(
   "/:id/restore",
-  validate({ params: sellerIdParamSchema, body: adminRestoreSellerSchema }),
+  validate({
+    params: sellerIdParamSchema,
+    body: adminRestoreSellerSchema,
+  }),
   restoreSeller
+);
+
+adminRouter.delete(
+  "/:id",
+  validate({
+    params: sellerIdParamSchema,
+    body: adminDeleteSellerSchema,
+  }),
+  deleteSeller
 );
 
 router.use(protectedRouter);

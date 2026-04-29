@@ -347,41 +347,49 @@ class PropertyModel {
   }
 
   static async list({
-    page = 1,
-    limit = 10,
-    sortBy = "created_at",
-    sortOrder = "desc",
-    filters = {},
-  } = {}) {
-    const safePage = Math.max(Number(page) || 1, 1);
-    const safeLimit = Math.max(Number(limit) || 10, 1);
-    const offset = (safePage - 1) * safeLimit;
-    const { column, order } = this.parseSort(sortBy, sortOrder);
-    const built = buildFilters(filters);
-    const where = `WHERE ${built.conditions.join(" AND ")}`;
+  page = 1,
+  limit = 10,
+  sortBy = "created_at",
+  sortOrder = "desc",
+  filters = {},
+} = {}) {
+  const safePage = Math.max(Number(page) || 1, 1);
+  const safeLimit = Math.max(Number(limit) || 10, 1);
+  const offset = (safePage - 1) * safeLimit;
 
-    const total = await this.count(filters);
-    const { rows } = await pool.query(
-      `
-        SELECT *
-        FROM ${TABLE}
-        ${where}
-        ORDER BY ${column} ${order}
-        LIMIT $${built.values.length + 1}
-        OFFSET $${built.values.length + 2}
-      `,
-      [...built.values, safeLimit, offset]
-    );
+  const { column, order } = this.parseSort(sortBy, sortOrder);
+  const built = buildFilters(filters);
 
-    return {
-      rows,
-      total,
-      page: safePage,
-      limit: safeLimit,
-      totalPages: Math.ceil(total / safeLimit) || 1,
-    };
-  }
+  const whereClause =
+    built.conditions.length > 0
+      ? `WHERE ${built.conditions.join(" AND ")}`
+      : "";
 
+  const total = await this.count(filters);
+
+  const query = `
+    SELECT *
+    FROM ${TABLE}
+    ${whereClause}
+    ORDER BY ${column} ${order}
+    LIMIT $${built.values.length + 1}
+    OFFSET $${built.values.length + 2}
+  `;
+
+  const { rows } = await pool.query(query, [
+    ...built.values,
+    safeLimit,
+    offset,
+  ]);
+
+  return {
+    rows,
+    total,
+    page: safePage,
+    limit: safeLimit,
+    totalPages: Math.ceil(total / safeLimit) || 1,
+  };
+}
   static async findEstateProperties(sellerId, propertyType, estateId) {
     const built = buildFilters({
       sellerId,
