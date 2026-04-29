@@ -1,0 +1,104 @@
+❌ Redis error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+Error: Connection is closed.
+    at EventEmitter.connectionCloseHandler (C:\Users\hp\Desktop\real-kudu-api2\node_modules\ioredis\built\Redis.js:208:28)
+    at Object.onceWrapper (node:events:639:26)
+    at EventEmitter.emit (node:events:536:35)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+❌ Redis error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+❌ Redis error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+❌ Redis error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+❌ Redis error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+❌ Redis error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+Error: getaddrinfo ENOTFOUND red-d7ciddhj2pic73ef0e9g
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:120:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'red-d7ciddhj2pic73ef0e9g'
+}
+⚠️ SMTP unavailable: connect ETIMEDOUT 192.178.223.109:587 (code: ESOCKET)
+⚠️ Continuing startup because REQUIRE_SMTP_ON_STARTUP is not true.

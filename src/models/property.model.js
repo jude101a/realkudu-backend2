@@ -98,6 +98,9 @@ const normalizePropertyType = (value) => {
   }
 };
 
+const escapeLikePattern = (value) =>
+  String(value).replace(/[\\%_]/g, (match) => `\\${match}`);
+
 const normalizeColumnValue = (column, value) => {
   if (value === undefined) {
     return undefined;
@@ -236,16 +239,16 @@ const buildFilters = (filters = {}, startIndex = 1) => {
   }
 
   if (filters.q) {
-    const term = `%${String(filters.q).trim()}%`;
+    const term = `%${escapeLikePattern(String(filters.q).trim())}%`;
     push(
       [
         "(",
-        "name ILIKE ?",
-        "OR address ILIKE ?",
-        "OR property_type ILIKE ?",
-        "OR description ILIKE ?",
-        "OR lga ILIKE ?",
-        "OR state ILIKE ?",
+        "COALESCE(name::text, '') ILIKE ? ESCAPE '\\'",
+        "OR COALESCE(address::text, '') ILIKE ? ESCAPE '\\'",
+        "OR COALESCE(property_type::text, '') ILIKE ? ESCAPE '\\'",
+        "OR COALESCE(description::text, '') ILIKE ? ESCAPE '\\'",
+        "OR COALESCE(lga::text, '') ILIKE ? ESCAPE '\\'",
+        "OR COALESCE(state::text, '') ILIKE ? ESCAPE '\\'",
         ")",
       ].join(" "),
       term
