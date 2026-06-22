@@ -1,13 +1,20 @@
 import { Pool } from "pg";
-const dbSslRejectUnauthorized = 'true';
 
-const explicitDbSslSetting = 'true'
+const dbSslRejectUnauthorized =
+  process.env.DB_SSL_REJECT_UNAUTHORIZED === "true";
+const explicitDbSslSetting = process.env.DB_SSL?.toLowerCase?.();
 const localDbHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 const internalHostSuffixes = [".internal", ".render.internal"];
 const externalRenderHostSuffix = ".render.com";
 const startupRetryRounds = 3;
 const startupRetryDelayMs = 1500;
-const internalConnectionStringEnvNames = 'postgresql://oortcloud:S2OerCPLdS7KRgDDWLF4u3kRZMEh6pww@dpg-d75s3sq4d50c73cmapvg-a.virginia-postgres.render.com/real_kudu_db_cwcs'
+const internalConnectionStringEnvNames = [
+  "DATABASE_INTERNAL_URL",
+  "DATABASE_PRIVATE_URL",
+  "INTERNAL_DATABASE_URL",
+  "RENDER_DATABASE_INTERNAL_URL",
+];
+
 function getRequiredConnectionString() {
   if (!process.env.DATABASE_URL) {
     const error = new Error("DATABASE_URL is missing");
@@ -20,7 +27,7 @@ function getRequiredConnectionString() {
 
 function parseDatabaseUrl() {
   try {
-    return new URL('postgresql://oortcloud:S2OerCPLdS7KRgDDWLF4u3kRZMEh6pww@dpg-d75s3sq4d50c73cmapvg-a.virginia-postgres.render.com/real_kudu_db_cwcs');
+    return new URL(getRequiredConnectionString());
   } catch {
     return null;
   }
@@ -121,7 +128,7 @@ function getSslAttemptPlanForHost(hostname) {
   const normalizedHost = hostname.toLowerCase();
 
   if (explicitDbSslSetting === "true") {
-    return [true, false];
+    return [true];
   }
 
   if (explicitDbSslSetting === "false") {
@@ -190,7 +197,7 @@ function getConnectionCandidates() {
   const candidates = [];
   const seen = new Set();
   const connectionStrings = [
-   internalConnectionStringEnvNames,
+    getConfiguredInternalConnectionString(),
     deriveInternalConnectionStringFromRenderExternal(),
     getRequiredConnectionString(),
   ].filter(Boolean);

@@ -30,6 +30,7 @@ const formatDbError = (err) => {
   }
 
   if (
+    err.code === "28000" ||
     message.includes("SSL/TLS required") ||
     message.includes("SSL required")
   ) {
