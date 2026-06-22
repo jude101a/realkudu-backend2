@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v1";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v5";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v9";
 
 
 
@@ -120,6 +120,117 @@ const PROPERTY_TABLE_INDEXES = Object.freeze([
   `CREATE INDEX IF NOT EXISTS idx_property_seller_type_created_at ON property(seller_id, property_type, created_at DESC)`,
 ]);
 
+const USER_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
+  { name: "firebase_uid", typeSql: "VARCHAR(128)" },
+  { name: "first_name", typeSql: "VARCHAR(50)" },
+  { name: "last_name", typeSql: "VARCHAR(100)" },
+  { name: "email", typeSql: "VARCHAR(255)" },
+  { name: "phone_number", typeSql: "VARCHAR(20)" },
+  { name: "password_hash", typeSql: "TEXT" },
+  { name: "transaction_pin", typeSql: "CHAR(4)" },
+  { name: "address", typeSql: "TEXT" },
+  { name: "profile_image_url", typeSql: "TEXT" },
+  { name: "occupation", typeSql: "VARCHAR(150)" },
+  { name: "position_at_work", typeSql: "VARCHAR(150)" },
+  { name: "place_of_work", typeSql: "VARCHAR(150)" },
+  { name: "local_government_area", typeSql: "VARCHAR(100)" },
+  { name: "state", typeSql: "VARCHAR(100)" },
+  { name: "country", typeSql: "VARCHAR(100)", defaultSql: "'Nigeria'" },
+  { name: "marital_status", typeSql: "VARCHAR(20)", defaultSql: "'single'" },
+  { name: "number_of_children", typeSql: "SMALLINT", defaultSql: "0" },
+  { name: "hobbies", typeSql: "TEXT" },
+  { name: "nin", typeSql: "VARCHAR(11)" },
+  { name: "bvn", typeSql: "VARCHAR(11)" },
+  { name: "role", typeSql: "VARCHAR(50)", defaultSql: "'user'" },
+  { name: "is_verified", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "is_upgraded", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "is_lawyer", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const SELLER_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
+  { name: "user_id", typeSql: "UUID" },
+  { name: "business_name", typeSql: "VARCHAR(255)" },
+  { name: "business_address", typeSql: "TEXT" },
+  { name: "business_email", typeSql: "VARCHAR(255)" },
+  { name: "business_phone", typeSql: "VARCHAR(20)" },
+  { name: "cac_number", typeSql: "VARCHAR(50)" },
+  { name: "tin_number", typeSql: "VARCHAR(50)" },
+  { name: "cac_document_url", typeSql: "TEXT" },
+  { name: "business_specification", typeSql: "TEXT" },
+  { name: "business_profile_image_url", typeSql: "TEXT" },
+  { name: "is_verified", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "is_active", typeSql: "BOOLEAN", defaultSql: "TRUE" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
+]);
+
+const LAWYER_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
+  { name: "user_id", typeSql: "UUID" },
+  { name: "full_name", typeSql: "VARCHAR(150)" },
+  { name: "phone", typeSql: "VARCHAR(20)" },
+  { name: "email", typeSql: "VARCHAR(255)" },
+  { name: "supreme_court_number", typeSql: "VARCHAR(50)" },
+  { name: "year_of_call", typeSql: "SMALLINT" },
+  { name: "nba_branch", typeSql: "VARCHAR(100)" },
+  { name: "law_firm", typeSql: "VARCHAR(150)" },
+  { name: "services", typeSql: "TEXT" },
+  { name: "states", typeSql: "TEXT" },
+  { name: "passport_photo_path", typeSql: "TEXT" },
+  { name: "call_to_bar_path", typeSql: "TEXT" },
+  { name: "annual_fee_path", typeSql: "TEXT" },
+  { name: "gov_id_path", typeSql: "TEXT" },
+  { name: "selfie_path", typeSql: "TEXT" },
+  { name: "status", typeSql: "VARCHAR(20)", defaultSql: "'pending'" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const FINANCE_ACCOUNT_RECONCILIATION_COLUMNS = Object.freeze([
+  { name: "user_id", typeSql: "UUID" },
+  { name: "user_role", typeSql: "VARCHAR(30)" },
+  { name: "wallet_balance", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "commission_balance", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "total_earnings", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "total_withdrawn", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "total_properties_sold", typeSql: "INTEGER", defaultSql: "0" },
+  { name: "total_sales_value", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "bank_name", typeSql: "VARCHAR(100)" },
+  { name: "bank_account_number", typeSql: "VARCHAR(30)" },
+  { name: "bank_account_name", typeSql: "VARCHAR(100)" },
+  { name: "is_active", typeSql: "BOOLEAN", defaultSql: "TRUE" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const REVIEW_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
+  { name: "user_id", typeSql: "UUID" },
+  { name: "user_name", typeSql: "VARCHAR(200)" },
+  { name: "user_avatar_url", typeSql: "TEXT" },
+  { name: "rating", typeSql: "NUMERIC(2,1)" },
+  { name: "review_text", typeSql: "TEXT" },
+  { name: "report_count", typeSql: "INTEGER", defaultSql: "0" },
+  { name: "helpful_count", typeSql: "INTEGER", defaultSql: "0" },
+  { name: "verified_buyer", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
+]);
+
+const NOTIFICATION_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
+  { name: "user_id", typeSql: "UUID" },
+  { name: "title", typeSql: "TEXT" },
+  { name: "message", typeSql: "TEXT" },
+  { name: "body", typeSql: "TEXT" },
+  { name: "meta", typeSql: "JSONB" },
+  { name: "data", typeSql: "JSONB" },
+  { name: "read", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "is_read", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "created_at", typeSql: "TIMESTAMP", defaultSql: "NOW()" },
+]);
+
 async function runStep(client, name, fn) {
   try {
     await fn();
@@ -181,6 +292,195 @@ async function doesTableExist(client, tableName) {
   ]);
 
   return Boolean(rows[0]?.existing_table);
+}
+
+async function getColumnType(client, tableName, columnName) {
+  const { rows } = await client.query(
+    `
+      SELECT data_type, udt_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = $1
+        AND column_name = $2
+      LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  return rows[0] || null;
+}
+
+function quoteIdentifier(identifier) {
+  return `"${String(identifier).replaceAll(`"`, `""`)}"`;
+}
+
+function quoteQualifiedIdentifier(schemaName, tableName) {
+  return `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+}
+
+async function getForeignKeysReferencingUsersId(client) {
+  const { rows } = await client.query(`
+    SELECT
+      ns.nspname AS schema_name,
+      rel.relname AS table_name,
+      attr.attname AS column_name,
+      type.typname AS column_type,
+      attr.attnotnull AS is_not_null,
+      con.conname,
+      pg_get_constraintdef(con.oid) AS definition
+    FROM pg_constraint con
+    JOIN pg_class rel
+      ON rel.oid = con.conrelid
+    JOIN pg_namespace ns
+      ON ns.oid = rel.relnamespace
+    JOIN unnest(con.conkey) WITH ORDINALITY AS con_key(attnum, ord)
+      ON true
+    JOIN unnest(con.confkey) WITH ORDINALITY AS ref_key(attnum, ord)
+      ON ref_key.ord = con_key.ord
+    JOIN pg_attribute attr
+      ON attr.attrelid = con.conrelid
+     AND attr.attnum = con_key.attnum
+    JOIN pg_attribute ref_attr
+      ON ref_attr.attrelid = con.confrelid
+     AND ref_attr.attnum = ref_key.attnum
+    JOIN pg_type type
+      ON type.oid = attr.atttypid
+    WHERE con.contype = 'f'
+      AND con.confrelid = 'users'::regclass
+      AND ref_attr.attname = 'id'
+      AND array_length(con.conkey, 1) = 1
+      AND array_length(con.confkey, 1) = 1
+  `);
+
+  return rows;
+}
+
+async function dropForeignKeys(client, foreignKeys) {
+  for (const constraint of foreignKeys) {
+    const tableName = quoteQualifiedIdentifier(
+      constraint.schema_name,
+      constraint.table_name
+    );
+    const constraintName = quoteIdentifier(constraint.conname);
+
+    await client.query(
+      `ALTER TABLE ${tableName} DROP CONSTRAINT IF EXISTS ${constraintName}`
+    );
+  }
+}
+
+async function migrateLegacyUserReferenceColumns(client, foreignKeys) {
+  for (const constraint of foreignKeys) {
+    if (constraint.column_type === "uuid") {
+      continue;
+    }
+
+    if (!["int2", "int4", "int8"].includes(constraint.column_type)) {
+      throw new Error(
+        `Cannot migrate ${constraint.table_name}.${constraint.column_name} from ` +
+          `${constraint.column_type} to UUID automatically.`
+      );
+    }
+
+    const tableName = quoteQualifiedIdentifier(
+      constraint.schema_name,
+      constraint.table_name
+    );
+    const columnName = quoteIdentifier(constraint.column_name);
+    const tempColumnName = quoteIdentifier(
+      `${constraint.column_name}_uuid_migration`
+    );
+
+    await client.query(
+      `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${tempColumnName} UUID`
+    );
+    await client.query(`
+      UPDATE ${tableName} target
+      SET ${tempColumnName} = users.__migration_uuid
+      FROM users
+      WHERE target.${columnName} = users.legacy_integer_id
+        AND target.${columnName} IS NOT NULL
+    `);
+
+    const { rows: unmappedRows } = await client.query(`
+      SELECT COUNT(*)::int AS unmapped_count
+      FROM ${tableName}
+      WHERE ${columnName} IS NOT NULL
+        AND ${tempColumnName} IS NULL
+    `);
+
+    if (unmappedRows[0]?.unmapped_count > 0) {
+      throw new Error(
+        `Cannot migrate ${constraint.table_name}.${constraint.column_name}: ` +
+          `${unmappedRows[0].unmapped_count} rows reference missing users.`
+      );
+    }
+
+    await client.query(`ALTER TABLE ${tableName} DROP COLUMN ${columnName}`);
+    await client.query(
+      `ALTER TABLE ${tableName} RENAME COLUMN ${tempColumnName} TO ${columnName}`
+    );
+
+    if (constraint.is_not_null) {
+      await client.query(
+        `ALTER TABLE ${tableName} ALTER COLUMN ${columnName} SET NOT NULL`
+      );
+    }
+  }
+}
+
+async function restoreForeignKeys(client, foreignKeys) {
+  for (const constraint of foreignKeys) {
+    const tableName = quoteQualifiedIdentifier(
+      constraint.schema_name,
+      constraint.table_name
+    );
+    const constraintName = quoteIdentifier(constraint.conname);
+
+    await client.query(
+      `ALTER TABLE ${tableName} ADD CONSTRAINT ${constraintName} ${constraint.definition}`
+    );
+  }
+}
+
+async function ensureUsersIdIsUuid(client) {
+  if (!(await doesTableExist(client, "users"))) {
+    return;
+  }
+
+  const idColumn = await getColumnType(client, "users", "id");
+  if (!idColumn || idColumn.udt_name === "uuid") {
+    return;
+  }
+
+  if (!["int2", "int4", "int8"].includes(idColumn.udt_name)) {
+    throw new Error(
+      `Existing users.id column is ${idColumn.data_type}, but this schema requires UUID.`
+    );
+  }
+
+  const legacyForeignKeys = await getForeignKeysReferencingUsersId(client);
+  await dropForeignKeys(client, legacyForeignKeys);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS legacy_integer_id BIGINT`);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS __migration_uuid UUID`);
+  await client.query(
+    `UPDATE users SET legacy_integer_id = id::bigint WHERE legacy_integer_id IS NULL`
+  );
+  await client.query(
+    `UPDATE users SET __migration_uuid = gen_random_uuid() WHERE __migration_uuid IS NULL`
+  );
+  await migrateLegacyUserReferenceColumns(client, legacyForeignKeys);
+  await client.query(`ALTER TABLE users ALTER COLUMN id DROP IDENTITY IF EXISTS`);
+  await client.query(`ALTER TABLE users ALTER COLUMN id DROP DEFAULT`);
+  await client.query(
+    `ALTER TABLE users ALTER COLUMN id TYPE UUID USING __migration_uuid`
+  );
+  await client.query(`ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid()`);
+  await client.query(`ALTER TABLE users DROP COLUMN __migration_uuid`);
+  await client.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_legacy_integer_id ON users(legacy_integer_id)`
+  );
+  await restoreForeignKeys(client, legacyForeignKeys);
 }
 
 async function ensureSetUpdatedAtFunction(client) {
@@ -508,6 +808,8 @@ async function createCoreTables(client) {
     );
   `);
 
+  await ensureUsersIdIsUuid(client);
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS sellers (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -813,6 +1115,10 @@ async function ensureImagesTableHotfix(client) {
 }
 
 const STARTUP_SCHEMA_RECONCILIATION = Object.freeze({
+  users: USER_TABLE_RECONCILIATION_COLUMNS,
+  sellers: SELLER_TABLE_RECONCILIATION_COLUMNS,
+  lawyers: LAWYER_TABLE_RECONCILIATION_COLUMNS,
+  notifications: NOTIFICATION_TABLE_RECONCILIATION_COLUMNS,
   houses: [
     { name: "state", typeSql: "VARCHAR(100)" },
     { name: "lga", typeSql: "VARCHAR(100)" },
@@ -831,6 +1137,8 @@ const STARTUP_SCHEMA_RECONCILIATION = Object.freeze({
   purchase_process_inspection_payments:
     PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS,
   purchase_process_contract_uploads: PURCHASE_PROCESS_CONTRACT_UPLOAD_COLUMNS,
+  finance_accounts: FINANCE_ACCOUNT_RECONCILIATION_COLUMNS,
+  reviews: REVIEW_TABLE_RECONCILIATION_COLUMNS,
 });
 
 async function ensureTableColumns(client, tableName, columns) {
@@ -1025,6 +1333,9 @@ export async function initializeDatabaseTablesSafe() {
     await runStep(client, "_migration_history", async () =>
       ensureMigrationHistory(client)
     );
+    await runStep(client, "core tables", async () => createCoreTables(client));
+    await runStep(client, "property tables", async () => createPropertyTables(client));
+
     await runStep(client, "images table hotfix", async () =>
       ensureImagesTableHotfix(client)
     );
@@ -1037,8 +1348,6 @@ export async function initializeDatabaseTablesSafe() {
       ensureNotificationTables(client)
     );
 
-    await runStep(client, "core tables", async () => createCoreTables(client));
-    await runStep(client, "property tables", async () => createPropertyTables(client));
     await runStep(client, "startup schema reconciliation", async () =>
       ensureStartupSchemaReconciliation(client)
     );

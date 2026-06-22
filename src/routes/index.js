@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { healthCheck } from "../controllers/health.controller.js";
+import { openApiSpec, swaggerHtml } from "../docs/openapi.js";
 import userRoutes from "./user.routes.js";
 import sellerRoutes from "./seller.routes.js";
 // import landPropertyRoutes from "./land.property.routes.js";
@@ -17,6 +18,8 @@ import notificationRoutes from "./utility.routes/notification.route.js";
 const router = Router();
 
 router.get("/health", healthCheck);
+router.get("/docs.json", (_req, res) => res.json(openApiSpec));
+router.get("/docs", (_req, res) => res.type("html").send(swaggerHtml()));
 router.use("/users", userRoutes);
 router.use("/sellers", sellerRoutes);
 // router.use("/land-properties", landPropertyRoutes);
