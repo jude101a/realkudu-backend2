@@ -94,33 +94,9 @@ function getConnectionStringForSslMode(connectionString, sslEnabled) {
     sslEnabled
       ? dbSslRejectUnauthorized
         ? "verify-full"
-        : "no-verify"
+        : "require"
       : "disable"
   );
-  return parsedUrl.toString();
-}
-
-function deriveInternalConnectionStringFromRenderExternal() {
-  if (process.env.RENDER !== "true") {
-    return null;
-  }
-
-  const parsedUrl = parseDatabaseUrl();
-  if (!parsedUrl || !isRenderExternalHost(parsedUrl.hostname.toLowerCase())) {
-    return null;
-  }
-
-  const derivedHost = parsedUrl.hostname.split(".")[0];
-  if (!derivedHost || derivedHost === parsedUrl.hostname) {
-    return null;
-  }
-
-  parsedUrl.hostname = derivedHost;
-  parsedUrl.searchParams.delete("ssl");
-  parsedUrl.searchParams.delete("sslmode");
-  parsedUrl.searchParams.delete("sslcert");
-  parsedUrl.searchParams.delete("sslkey");
-  parsedUrl.searchParams.delete("sslrootcert");
   return parsedUrl.toString();
 }
 
@@ -198,7 +174,6 @@ function getConnectionCandidates() {
   const seen = new Set();
   const connectionStrings = [
     getConfiguredInternalConnectionString(),
-    deriveInternalConnectionStringFromRenderExternal(),
     getRequiredConnectionString(),
   ].filter(Boolean);
 
