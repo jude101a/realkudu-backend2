@@ -1,7 +1,7 @@
 import pg from "pg";
 
 const { Pool } = pg;
-
+console.log("***** NEW DB FILE LOADED *****");
 const pool = new Pool({
   connectionString:
     process.env.DATABASE_INTERNAL_URL ||
