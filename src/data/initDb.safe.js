@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v1";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v9";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v10";
 
 
 
@@ -775,7 +775,7 @@ async function createCoreTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      firebase_uid VARCHAR(128) UNIQUE NOT NULL,
+      firebase_uid VARCHAR(128) UNIQUE,
       first_name VARCHAR(50) NOT NULL,
       last_name VARCHAR(100) NOT NULL,
       email VARCHAR(255) UNIQUE NOT NULL,
@@ -1169,6 +1169,29 @@ async function ensureStartupSchemaReconciliation(client) {
   }
 }
 
+async function ensureAdminColumns(client) {
+  if (!(await doesTableExist(client, "users"))) {
+    return;
+  }
+
+  const columnsToAdd = [
+    { name: "active_role", sql: `VARCHAR(50)` },
+    { name: "position", sql: `VARCHAR(150)` },
+    { name: "department", sql: `VARCHAR(150)` },
+    { name: "region", sql: `VARCHAR(100)` },
+    { name: "account_status", sql: `VARCHAR(50) DEFAULT 'active'` },
+  ];
+
+  for (const column of columnsToAdd) {
+    const existing = await getColumnType(client, "users", column.name);
+    if (!existing) {
+      await client.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS ${quoteIdentifier(column.name)} ${column.sql}`
+      );
+    }
+  }
+}
+
 async function createFinanceAndOpsTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS tenant_meta (
@@ -1262,6 +1285,39 @@ async function createFinanceAndOpsTables(client) {
 
   await createPurchaseProcessTables(client);
   await ensurePurchaseProcessBuyerForeignKeys(client);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type VARCHAR(50) NOT NULL,
+      amount NUMERIC(15,2) NOT NULL CHECK (amount > 0),
+      currency VARCHAR(10) DEFAULT 'NGN',
+      status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      description TEXT,
+      reference_code VARCHAR(100) UNIQUE,
+      metadata JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS admin_activity_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      admin_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action VARCHAR(255) NOT NULL,
+      method VARCHAR(10) NOT NULL,
+      path TEXT NOT NULL,
+      status_code INTEGER,
+      target_type VARCHAR(50),
+      target_id VARCHAR(255),
+      metadata JSONB,
+      ip_address INET,
+      user_agent TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
 }
 
 async function ensureUpdatedAtTrigger(client) {
@@ -1280,6 +1336,7 @@ async function ensureUpdatedAtTrigger(client) {
     "purchase_process_inspection_payments",
     "purchase_process_contract_uploads",
     "images",
+    "transactions",
   ];
 
   for (const tableName of triggerTables) {
@@ -1310,6 +1367,13 @@ async function ensureIndexes(client) {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_property_buyer ON purchase_process_contract_uploads(property_id, buyer_id)`,
     `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_property_id ON purchase_process_contract_uploads(property_id)`,
     `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_buyer_id ON purchase_process_contract_uploads(buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_reference_code ON transactions(reference_code) WHERE reference_code IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_admin_id ON admin_activity_logs(admin_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_action ON admin_activity_logs(action)`,
   ];
 
   for (const statement of indexSql) {
@@ -1334,6 +1398,7 @@ export async function initializeDatabaseTablesSafe() {
       ensureMigrationHistory(client)
     );
     await runStep(client, "core tables", async () => createCoreTables(client));
+    await runStep(client, "ensure admin columns", async () => ensureAdminColumns(client));
     await runStep(client, "property tables", async () => createPropertyTables(client));
 
     await runStep(client, "images table hotfix", async () =>

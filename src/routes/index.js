@@ -13,6 +13,8 @@ import propertyRoutes from "./property.routes.js"
 import purchaseProcessRoutes from "./purchase.process.routes.js";
 import imagesRoutes from "./utility.routes/images.routes.js";
 import notificationRoutes from "./utility.routes/notification.route.js";
+import adminRoutes from "./admin.routes.js";
+import webhookRoutes from "./webhook.routes.js"
 // import propertyListingRoutes from "./property.listing.route.js";
 
 const router = Router();
@@ -32,6 +34,15 @@ router.use("/properties", propertyRoutes),
 router.use("/purchase-process", purchaseProcessRoutes);
 router.use("/images", imagesRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/admin", adminRoutes);
 // router.use("/properties", propertyListingRoutes);
+
+router.use(
+
+    "/api/webhooks",
+
+    webhookRoutes
+
+);
 
 export default router;
