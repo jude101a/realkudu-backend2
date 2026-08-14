@@ -1,6 +1,4 @@
-import mongoose from "mongoose";
-
-import PaystackClient from "../utils/paystack.js";
+import paystack from "../utils/paystack.js";
 import TransactionRepository from "../repositories/transaction.repositories.js";
 
 import PropertyModel from "../models/property.model.js";
@@ -9,6 +7,11 @@ import { findUserById } from "../models/user.models.js";
 import { generateReference } from "../utils/reference.js";
 
 import logger from "../config/logger.js";
+
+const info = logger.info.bind(logger);
+const _findById = findUserById;
+const create = TransactionRepository.create.bind(TransactionRepository);
+const initializeTransaction = paystack.initializeTransaction.bind(paystack);
 
 class PaymentService {
 
@@ -20,23 +23,25 @@ class PaymentService {
 
     async calculateAmount(propertyId, paymentType) {
 
-        const property = await PropertyModel.findById(propertyId)
-            .populate("seller")
-            .populate("agent");
+        const property = await PropertyModel.findById(propertyId);
 
         if (!property)
             throw new Error("Property not found.");
+
+        const bookingFee = Number(property.booking_fee ?? property.bookingFee ?? 0);
+        const price = Number(property.price ?? property.asking_price ?? property.askingPrice ?? 0);
+        const rentPrice = Number(property.rent_price ?? property.rentPrice ?? 0);
 
         switch (paymentType) {
 
             case "BOOKING":
 
-                if (!property.bookingFee)
+                if (!bookingFee)
                     throw new Error("Booking fee not configured.");
 
                 return {
 
-                    amount: property.bookingFee,
+                    amount: bookingFee,
 
                     property
 
@@ -46,7 +51,7 @@ class PaymentService {
 
                 return {
 
-                    amount: property.price - property.bookingFee,
+                    amount: price - bookingFee,
 
                     property
 
@@ -56,7 +61,7 @@ class PaymentService {
 
                 return {
 
-                    amount: property.price,
+                    amount: price,
 
                     property
 
@@ -66,7 +71,7 @@ class PaymentService {
 
                 return {
 
-                    amount: property.rentPrice,
+                    amount: rentPrice,
 
                     property
 
@@ -134,13 +139,13 @@ class PaymentService {
 
             paymentType,
 
-            buyer: buyer._id,
+            buyerId: buyer.id ?? buyer._id,
 
-            seller: property.seller,
+            sellerId: property.seller_id ?? property.sellerId ?? property.seller,
 
-            agent: property.agent,
+            agentId: property.agent_id ?? property.agentId ?? property.agent,
 
-            property: property._id,
+            propertyId: property.property_id ?? property.propertyId ?? property.id,
 
             amount,
 
@@ -172,9 +177,9 @@ class PaymentService {
 
             metadata: {
 
-                buyerId: buyer._id,
+                buyerId: buyer.id ?? buyer._id,
 
-                propertyId: property._id,
+                propertyId: property.property_id ?? property.propertyId ?? property.id,
 
                 paymentType
 
@@ -590,7 +595,7 @@ class PaymentService {
 
         const payload = {
 
-            transaction: Transaction.gatewayReference
+            transaction: transaction.gateway_reference ?? transaction.gatewayReference
 
         };
 
@@ -640,12 +645,81 @@ class PaymentService {
      */
     async startSession() {
 
-        return await mongoose.startSession();
+        return null;
 
+    }
+
+
+
+    async handleWebhookEvent(event) {
+
+    const { event: eventType, data } = event;
+
+    info({ event: "WEBHOOK_RECEIVED", type: eventType, reference: data?.reference });
+
+    switch (eventType) {
+
+        case "charge.success": {
+
+            const transaction = await TransactionRepository.findByReference(data.reference);
+
+            if (!transaction) {
+                info({ event: "WEBHOOK_UNKNOWN_REFERENCE", reference: data.reference });
+                return;
+            }
+
+            // Idempotency check — don't reprocess if already marked SUCCESS
+            if (transaction.status === "SUCCESS") {
+                info({ event: "WEBHOOK_ALREADY_PROCESSED", reference: data.reference });
+                return;
+            }
+
+            // Verify amount matches (defense against tampering)
+            if (Number(data.amount) !== Number(transaction.amount) * 100) {
+                info({ event: "WEBHOOK_AMOUNT_MISMATCH", reference: data.reference });
+                await TransactionRepository.markFailed(data.reference, data);
+                return;
+            }
+
+            await TransactionRepository.markSuccessful(data.reference, data);
+
+            info({ event: "PAYMENT_SUCCESS_WEBHOOK", reference: data.reference });
+
+            // TODO: trigger post-payment logic here — e.g. create escrow,
+            // notify seller, update property status to sold, etc.
+
+            break;
+        }
+
+        case "charge.failed": {
+
+            await TransactionRepository.markFailed(data.reference, data);
+            info({ event: "PAYMENT_FAILED_WEBHOOK", reference: data.reference });
+            break;
+
+        }
+
+        case "transfer.success":
+        case "transfer.failed":
+        case "transfer.reversed": {
+
+            // Handle transfer webhooks separately if you're paying out sellers
+            info({ event: "TRANSFER_WEBHOOK", type: eventType, reference: data.reference });
+            break;
+
+        }
+
+        default:
+            info({ event: "WEBHOOK_UNHANDLED_EVENT", type: eventType });
     }
 
 }
 
+}
+
+// webhook handler
 
 
-export default PaymentService;
+
+
+export default new PaymentService();

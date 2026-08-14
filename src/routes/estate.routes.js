@@ -22,6 +22,7 @@ import {
   updateEstateCoverSchema,
   updateEstateDetailsSchema,
 } from "../validators/estate.validator.js";
+import { uploadMultipleMedia, enforceMediaSize } from "./utility.routes/images.routes.js";
 
 const router = Router();
 const protectedRouter = Router();
@@ -48,7 +49,13 @@ router.get("/getEstate/:estateId", validate({ params: estateIdParamSchema }), ge
 
 /* Protected write routes */
 protectedRouter.use(protect);
-protectedRouter.post("/createEstate", validate({ body: createEstateSchema }), createEstate);
+protectedRouter.post(
+  "/createEstate",
+  uploadMultipleMedia("files", 20),
+  enforceMediaSize,
+  validate({ body: createEstateSchema }),
+  createEstate
+);
 protectedRouter.put(
   "/updateEstateCoverImage/:estateId",
   validate({ params: estateIdParamSchema, body: updateEstateCoverSchema }),

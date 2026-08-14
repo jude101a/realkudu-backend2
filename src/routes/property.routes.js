@@ -22,6 +22,7 @@ import {
   getBySellerHouseProperties,
   getSellerProperties,
   getSellerEstateLands,
+  safeGetPropertyImages,
 
   
  
@@ -36,6 +37,7 @@ import {
   sellerIdParamSchema,
   updateCoverSchema,
 } from "../validators/property.validator.js";
+import { uploadMultipleMedia, enforceMediaSize } from "./utility.routes/images.routes.js";
 
 const router = Router();
 const protectedRouter = Router();
@@ -52,20 +54,30 @@ router.get("/stats", getPropertiesStats);
 
 router.get("/sellerProperties/:sellerId", getSellerProperties);
 router.get("/sellerHouseApartments/:sellerId/:houseId", getBySellerHouseProperties);
+router.get(
+  "/:propertyId/images",
+  // use safe getter to avoid 500s
+  (req, res, next) => {
+    req.params.propertyId = req.params.propertyId || req.query.propertyId;
+    next();
+  },
+  // forward to controller
+  safeGetPropertyImages
+);
 
 router.post("/stats/count", countProperties);
 router.post("/sellerProperties/:sellerId", getBySellerAndPropertyType);
 router.post("/sellerEstateProperties/:sellerId/:estateId/:propertyType", getEstateProperties);
 router.post("/sellerNonEstateProperties/:sellerId/:propertyType", getNonEstateProperties);
 
-router.get("getById/:propertyId/:sellerId", getPropertyById); // always last
+router.get("/getById/:propertyId/:sellerId", getPropertyById); // always last
 /* ================= PROTECTED WRITE ROUTES ================= */
 protectedRouter.use(protect);
 router.delete("/deleteProperty/:sellerId/:propertyId",validate({params: propertyIdParamSchema}) , deleteProperty)
 router.post("/create",
-  
+  uploadMultipleMedia("files", 20),
+  enforceMediaSize,
   // validate({ body: createSchema }),
-  
   createProperty);
 router.put(
   "/update/:propertyId",

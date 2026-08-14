@@ -1,6 +1,10 @@
 import { create } from "axios";
-import logger from "../config/logger.js";
 import { secretKey, baseURL } from "../config/paystack.js";
+
+import logger from "../config/logger.js";
+
+const info = logger.info.bind(logger);
+const error = logger.error.bind(logger);
 
 class PaystackClient {
     constructor() {
@@ -39,12 +43,18 @@ class PaystackClient {
                 return response;
             },
             (error) => {
-                _error({
+                const payload = {
                     event: "PAYSTACK_ERROR",
                     message: error.message,
                     status: error.response?.status,
                     data: error.response?.data || null
-                });
+                };
+
+                try {
+                    logger.error(payload);
+                } catch {
+                    console.error(payload);
+                }
 
                 return Promise.reject(error);
             }

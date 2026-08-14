@@ -15,7 +15,7 @@ export const propertyIdParamSchema = Joi.object({
 
 export const createImageSchema = Joi.object({
   propertyId: uuid.required(),
-  imageUrl: Joi.string().uri().max(2048).required(),
+  imageUrl: Joi.string().uri().max(2048),
   isCover: Joi.boolean().default(false),
 });
 
@@ -25,14 +25,13 @@ export const bulkPropertyIdsBodySchema = Joi.object({
 
 export const createMultipleImagesSchema = Joi.object({
   propertyId: uuid.required(),
+  coverIndex: Joi.number().integer().min(0).max(19),
   images: Joi.array()
     .items(
       Joi.object({
-        imageUrl: Joi.string().uri().max(2048).required(),
+        imageUrl: Joi.string().uri().max(2048),
         isCover: Joi.boolean().default(false),
       })
     )
-    .min(1)
-    .max(200)
-    .required(),
+    .max(200),
 });

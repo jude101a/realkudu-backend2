@@ -1,4 +1,6 @@
 import HouseModel from "../models/house.model.js";
+import ImagesModel from "../models/utility.models/images.js";
+import { uploadToCloudinary, toMediaPayload } from "../controllers/utillity.controller/images.controller.js";
 
 const parseBooleanQuery = (value) => {
   if (value === undefined || value === null || value === "") return undefined;
@@ -33,7 +35,6 @@ export const createHouse = async (req, res) => {
   try {
     const payload = {
       estateId: req.body.estateId ?? null,
-      sellerId: req.body.sellerId,
       lawyerId: req.body.lawyerId || null,
       caretakerId: req.body.caretakerId || null,
       name: req.body.name,
@@ -46,6 +47,32 @@ export const createHouse = async (req, res) => {
     };
 
     const result = await HouseModel.create(payload);
+
+    // Attach uploaded images if provided
+    const files = req.files || (req.file ? [req.file] : []);
+    if (files.length) {
+      const uploads = [];
+      try {
+        for (const file of files) {
+          uploads.push(await uploadToCloudinary(file));
+        }
+
+        const coverIndex = Number(req.body.coverIndex);
+        const images = uploads.map((upload, index) =>
+          toMediaPayload({
+            propertyId: result.house_id,
+            isCover: Number.isInteger(coverIndex) && coverIndex === index,
+            file: files[index],
+            upload,
+          })
+        );
+
+        await ImagesModel.insertMultipleImages(result.house_id, images);
+      } catch (err) {
+        console.error("error uploading house images", err?.message || err);
+      }
+    }
+
     res.status(201).json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });

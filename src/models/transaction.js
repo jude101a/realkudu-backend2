@@ -1,388 +1,269 @@
-import mongoose from "mongoose";
+import pool from "../config/db.js";
 
-const { Schema, model } = mongoose;
+const TABLE = "transactions";
 
-const transactionSchema = new Schema(
-  {
-    // ===========================
-    // References
-    // ===========================
+const FIELD_MAP = Object.freeze({
+  id: "id",
+  reference: "reference",
+  paymentType: "payment_type",
+  propertyId: "property_id",
+  buyerId: "buyer_id",
+  sellerId: "seller_id",
+  agentId: "agent_id",
+  amount: "amount",
+  currency: "currency",
+  gateway: "gateway",
+  gatewayReference: "gateway_reference",
+  authorizationUrl: "authorization_url",
+  accessCode: "access_code",
+  status: "status",
+  gatewayResponse: "gateway_response",
+  createdAt: "created_at",
+  updatedAt: "updated_at",
+});
 
-    reference: {
-      type: String,
-      required: true,
-      unique: true,
-      index: true,
-    },
+const STATUS = Object.freeze({
+  PENDING: "PENDING",
+  INITIALIZED: "INITIALIZED",
+  PROCESSING: "PROCESSING",
+  SUCCESS: "SUCCESS",
+  FAILED: "FAILED",
+  CANCELLED: "CANCELLED",
+  REFUNDED: "REFUNDED",
+  EXPIRED: "EXPIRED",
+});
 
-    paystackReference: {
-      type: String,
-      default: null,
-      index: true,
-    },
+const WRITABLE_COLUMNS = new Set([
+  "reference",
+  "payment_type",
+  "property_id",
+  "buyer_id",
+  "seller_id",
+  "agent_id",
+  "amount",
+  "currency",
+  "gateway",
+  "gateway_reference",
+  "authorization_url",
+  "access_code",
+  "status",
+  "gateway_response",
+]);
 
-    paystackTransactionId: {
-      type: String,
-      default: null,
-      index: true,
-    },
+const normalizeStatus = (status) => {
+  if (!status) return status;
+  const normalized = String(status).toUpperCase();
+  return STATUS[normalized] || normalized;
+};
 
-    authorizationCode: {
-      type: String,
-      default: null,
-    },
+const toColumnPayload = (payload = {}) => {
+  const mapped = {};
 
-    accessCode: {
-      type: String,
-      default: null,
-    },
-
-    // ===========================
-    // Participants
-    // ===========================
-
-    buyerId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
-    },
-
-    sellerId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-      index: true,
-    },
-
-    agentId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-      index: true,
-    },
-
-    propertyId: {
-      type: Schema.Types.ObjectId,
-      ref: "Property",
-      default: null,
-      index: true,
-    },
-
-    bookingId: {
-      type: Schema.Types.ObjectId,
-      ref: "Booking",
-      default: null,
-    },
-
-    escrowId: {
-      type: Schema.Types.ObjectId,
-      ref: "Escrow",
-      default: null,
-    },
-
-    // ===========================
-    // Payment Details
-    // ===========================
-
-    amount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    currency: {
-      type: String,
-      default: "NGN",
-    },
-
-    gatewayFee: {
-      type: Number,
-      default: 0,
-    },
-
-    netAmount: {
-      type: Number,
-      default: 0,
-    },
-
-    // ===========================
-    // Revenue Sharing
-    // ===========================
-
-    platformAmount: {
-      type: Number,
-      default: 0,
-    },
-
-    sellerAmount: {
-      type: Number,
-      default: 0,
-    },
-
-    agentAmount: {
-      type: Number,
-      default: 0,
-    },
-
-    platformPercentage: {
-      type: Number,
-      default: 0,
-    },
-
-    sellerPercentage: {
-      type: Number,
-      default: 0,
-    },
-
-    agentPercentage: {
-      type: Number,
-      default: 0,
-    },
-
-    // ===========================
-    // Payment Type
-    // ===========================
-
-    paymentPurpose: {
-      type: String,
-      enum: [
-        "booking",
-        "purchase",
-        "rent",
-        "inspection",
-        "subscription",
-        "wallet_topup",
-        "escrow",
-        "refund",
-        "other",
-      ],
-      required: true,
-    },
-
-    paymentMethod: {
-      type: String,
-      enum: [
-        "card",
-        "bank_transfer",
-        "ussd",
-        "bank",
-        "wallet",
-        "qr",
-        "mobile_money",
-      ],
-      default: "card",
-    },
-
-    provider: {
-      type: String,
-      default: "paystack",
-    },
-
-    // ===========================
-    // Status
-    // ===========================
-
-    status: {
-      type: String,
-      enum: [
-        "pending",
-        "processing",
-        "success",
-        "failed",
-        "abandoned",
-        "cancelled",
-        "refunded",
-      ],
-      default: "pending",
-      index: true,
-    },
-
-    verified: {
-      type: Boolean,
-      default: false,
-    },
-
-    webhookProcessed: {
-      type: Boolean,
-      default: false,
-    },
-
-    settled: {
-      type: Boolean,
-      default: false,
-    },
-
-    // ===========================
-    // Customer
-    // ===========================
-
-    customerEmail: {
-      type: String,
-      required: true,
-      lowercase: true,
-      trim: true,
-    },
-
-    customerName: {
-      type: String,
-      default: "",
-    },
-
-    customerPhone: {
-      type: String,
-      default: "",
-    },
-
-    // ===========================
-    // Metadata
-    // ===========================
-
-    metadata: {
-      type: Schema.Types.Mixed,
-      default: {},
-    },
-
-    paystackResponse: {
-      type: Schema.Types.Mixed,
-      default: {},
-    },
-
-    verificationResponse: {
-      type: Schema.Types.Mixed,
-      default: {},
-    },
-
-    webhookPayload: {
-      type: Schema.Types.Mixed,
-      default: {},
-    },
-
-    // ===========================
-    // Failure
-    // ===========================
-
-    failureReason: {
-      type: String,
-      default: null,
-    },
-
-    refundReason: {
-      type: String,
-      default: null,
-    },
-
-    // ===========================
-    // Dates
-    // ===========================
-
-    initializedAt: {
-      type: Date,
-      default: Date.now,
-    },
-
-    paidAt: {
-      type: Date,
-      default: null,
-    },
-
-    verifiedAt: {
-      type: Date,
-      default: null,
-    },
-
-    refundedAt: {
-      type: Date,
-      default: null,
-    },
-
-    settledAt: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === undefined) continue;
+    const column = FIELD_MAP[key] || key;
+    if (!WRITABLE_COLUMNS.has(column)) continue;
+    mapped[column] = column === "status" ? normalizeStatus(value) : value;
   }
-);
 
-// ===========================
-// Indexes
-// ===========================
-
-transactionSchema.index({ reference: 1 });
-
-transactionSchema.index({ paystackReference: 1 });
-
-transactionSchema.index({ buyerId: 1 });
-
-transactionSchema.index({ sellerId: 1 });
-
-transactionSchema.index({ propertyId: 1 });
-
-transactionSchema.index({ status: 1 });
-
-transactionSchema.index({ paymentPurpose: 1 });
-
-transactionSchema.index({ createdAt: -1 });
-
-// ===========================
-// Virtual
-// ===========================
-
-transactionSchema.virtual("isSuccessful").get(function () {
-  return this.status === "success";
-});
-
-// ===========================
-// Instance Methods
-// ===========================
-
-transactionSchema.methods.markSuccess = function () {
-  this.status = "success";
-  this.verified = true;
-  this.paidAt = new Date();
-  this.verifiedAt = new Date();
-  return this.save();
+  return mapped;
 };
 
-transactionSchema.methods.markFailed = function (reason) {
-  this.status = "failed";
-  this.failureReason = reason;
-  return this.save();
+const toRow = (row) => {
+  if (!row) return null;
+
+  return {
+    ...row,
+    paymentType: row.payment_type,
+    propertyId: row.property_id,
+    buyerId: row.buyer_id,
+    sellerId: row.seller_id,
+    agentId: row.agent_id,
+    gatewayReference: row.gateway_reference,
+    authorizationUrl: row.authorization_url,
+    accessCode: row.access_code,
+    gatewayResponse: row.gateway_response,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    isSuccessful: row.status === STATUS.SUCCESS,
+  };
 };
 
-transactionSchema.methods.markRefunded = function (reason) {
-  this.status = "refunded";
-  this.refundReason = reason;
-  this.refundedAt = new Date();
-  return this.save();
+const insert = async (payload) => {
+  const mapped = toColumnPayload(payload);
+  const columns = Object.keys(mapped);
+
+  if (!columns.length) {
+    throw new Error("Transaction payload cannot be empty");
+  }
+
+  const placeholders = columns.map((_, index) => `$${index + 1}`).join(", ");
+  const values = Object.values(mapped);
+
+  const { rows } = await pool.query(
+    `
+      INSERT INTO ${TABLE} (${columns.join(", ")})
+      VALUES (${placeholders})
+      RETURNING *
+    `,
+    values
+  );
+
+  return toRow(rows[0]);
 };
 
-// ===========================
-// Static Methods
-// ===========================
+const updateWhere = async (whereColumn, whereValue, payload) => {
+  const mapped = toColumnPayload(payload);
+  const entries = Object.entries(mapped);
 
-transactionSchema.statics.findByReference = function (reference) {
-  return this.findOne({ reference });
+  if (!entries.length) {
+    return Transaction.findOne({ [whereColumn]: whereValue });
+  }
+
+  const sets = entries.map(([column], index) => `${column} = $${index + 1}`);
+  const values = entries.map(([, value]) => value);
+  values.push(whereValue);
+
+  const { rows } = await pool.query(
+    `
+      UPDATE ${TABLE}
+      SET ${sets.join(", ")}, updated_at = NOW()
+      WHERE ${whereColumn} = $${values.length}
+      RETURNING *
+    `,
+    values
+  );
+
+  return toRow(rows[0]);
 };
 
-transactionSchema.statics.findSuccessful = function () {
-  return this.find({ status: "success" });
-};
+class TransactionRecord {
+  constructor(row) {
+    Object.assign(this, toRow(row));
+  }
 
-transactionSchema.statics.findPending = function () {
-  return this.find({ status: "pending" });
-};
+  async save() {
+    const updated = await updateWhere("id", this.id, this);
+    Object.assign(this, updated);
+    return this;
+  }
 
-transactionSchema.set("toJSON", {
-  virtuals: true,
-});
+  async markSuccess(gatewayResponse = this.gatewayResponse || {}) {
+    const updated = await Transaction.markSuccess(this.reference, gatewayResponse);
+    Object.assign(this, updated);
+    return this;
+  }
 
-transactionSchema.set("toObject", {
-  virtuals: true,
-});
+  async markFailed(reason) {
+    const updated = await Transaction.markFailed(this.reference, reason);
+    Object.assign(this, updated);
+    return this;
+  }
 
-const Transaction = model("Transaction", transactionSchema);
+  async markRefunded(reason) {
+    const updated = await Transaction.markRefunded(this.reference, reason);
+    Object.assign(this, updated);
+    return this;
+  }
+
+  toJSON() {
+    return { ...this };
+  }
+}
+
+class Transaction {
+  static STATUS = STATUS;
+
+  static async create(payload) {
+    return new TransactionRecord(await insert(payload));
+  }
+
+  static async findById(id) {
+    const { rows } = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    return rows[0] ? new TransactionRecord(rows[0]) : null;
+  }
+
+  static async findOne(filters = {}) {
+    const mapped = toColumnPayload(filters);
+    const entries = Object.entries(mapped);
+
+    if (!entries.length) {
+      throw new Error("findOne requires at least one filter");
+    }
+
+    const where = entries
+      .map(([column], index) => `${column} = $${index + 1}`)
+      .join(" AND ");
+    const values = entries.map(([, value]) => value);
+
+    const { rows } = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE ${where} LIMIT 1`,
+      values
+    );
+
+    return rows[0] ? new TransactionRecord(rows[0]) : null;
+  }
+
+  static async find(filters = {}) {
+    const mapped = toColumnPayload(filters);
+    const entries = Object.entries(mapped);
+    const values = entries.map(([, value]) => value);
+    const where = entries.length
+      ? `WHERE ${entries.map(([column], index) => `${column} = $${index + 1}`).join(" AND ")}`
+      : "";
+
+    const { rows } = await pool.query(
+      `
+        SELECT *
+        FROM ${TABLE}
+        ${where}
+        ORDER BY created_at DESC
+      `,
+      values
+    );
+
+    return rows.map((row) => new TransactionRecord(row));
+  }
+
+  static async findByReference(reference) {
+    return this.findOne({ reference });
+  }
+
+  static async findSuccessful() {
+    return this.find({ status: STATUS.SUCCESS });
+  }
+
+  static async findPending() {
+    return this.find({ status: STATUS.PENDING });
+  }
+
+  static async markSuccess(reference, gatewayResponse = {}) {
+    return updateWhere("reference", reference, {
+      status: STATUS.SUCCESS,
+      gatewayResponse,
+    });
+  }
+
+  static async markFailed(reference, reason) {
+    return updateWhere("reference", reference, {
+      status: STATUS.FAILED,
+      gatewayResponse: { failureReason: reason },
+    });
+  }
+
+  static async markRefunded(reference, reason) {
+    return updateWhere("reference", reference, {
+      status: STATUS.REFUNDED,
+      gatewayResponse: { refundReason: reason },
+    });
+  }
+
+  static async updateByReference(reference, payload) {
+    return updateWhere("reference", reference, payload);
+  }
+}
 
 export default Transaction;

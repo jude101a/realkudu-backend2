@@ -32,6 +32,7 @@ import {
   updateHouseLawyerSchema,
   updateHouseSchema,
 } from "../validators/house.validator.js";
+import { uploadMultipleMedia, enforceMediaSize } from "./utility.routes/images.routes.js";
 
 const router = Router();
 const protectedRouter = Router();
@@ -56,9 +57,23 @@ protectedRouter.put(
 );
 
 /* Protected write routes */
-protectedRouter.post("/", protect, validate({ body: createHouseSchema }), createHouse);
+protectedRouter.post(
+  "/",
+  protect,
+  uploadMultipleMedia("files", 20),
+  enforceMediaSize,
+  validate({ body: createHouseSchema }),
+  createHouse
+);
 /* Legacy compatibility */
-protectedRouter.post("/createHouse", protect, validate({ body: createHouseSchema }), createHouse);
+protectedRouter.post(
+  "/createHouse",
+  protect,
+  uploadMultipleMedia("files", 20),
+  enforceMediaSize,
+  validate({ body: createHouseSchema }),
+  createHouse
+);
 protectedRouter.put(
   "/:id/cover",
   protect,
@@ -97,7 +112,7 @@ protectedRouter.put(
   validate({ params: houseIdParamSchema, body: updateHouseCaretakerSchema }),
   updateHouseCaretaker
 );
-router.put("softDeleteHouse/:id", softDeleteHouse)
+router.put("/softDeleteHouse/:id", softDeleteHouse)
 protectedRouter.put("/:id", protect, validate({ params: houseIdParamSchema, body: updateHouseSchema }), updateHouse);
 protectedRouter.put("/updateHouse/:id", protect, validate({ params: houseIdParamSchema, body: updateHouseSchema }), updateHouse);
 

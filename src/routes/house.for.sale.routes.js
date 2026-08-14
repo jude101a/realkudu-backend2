@@ -1,3 +1,4 @@
+// MVP scope: intentionally disabled. House-for-sale APIs are not part of the active release scope.
 // import { Router } from "express";
 // import {
 //   addImage,

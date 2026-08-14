@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express, { Router } from "express";
 const router = Router();
 
 import PaymentController from "../controllers/payment.controller.js";
@@ -28,8 +28,6 @@ router.post(
 router.get(
 
     "/verify/:reference",
-
-    protect,
 
     PaymentController.verify
 
@@ -81,6 +79,12 @@ router.post(
 
     PaymentController.createTransferRecipient
 
+);
+
+router.post(
+    "/webhook",
+    express.raw({ type: "application/json" }),
+    PaymentController.webhook
 );
 
 export default router;

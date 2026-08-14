@@ -271,6 +271,31 @@ class PropertyModel {
     const db = client || pool;
     const payload = mapPayloadToDb(data);
 
+    // Auto-approval: if description does not contain phone numbers or
+    // suspicious meeting/contact phrases, auto-mark as 'approved'. Otherwise default to 'pending'.
+    if (!payload.status) {
+      const description = String(data.description || "").toLowerCase();
+      const phoneRe = /(?:\+?\d{1,3}[\s-]?)?(?:\(\d{2,4}\)[\s-]?)?[\d\s-]{6,15}\d/;
+      const suspiciousRe = /\b(call|contact|whatsapp|text|sms|meet|office|come to my|meet me|collect in my)\b/i;
+
+      const hasPhone = phoneRe.test(description);
+      const hasSuspicious = suspiciousRe.test(description);
+
+      // Only auto-approve when seller is verified and description is clean
+      let sellerVerified = false;
+      try {
+        if (data.sellerId) {
+          const { rows } = await pool.query(`SELECT is_verified FROM sellers WHERE id = $1 LIMIT 1`, [data.sellerId]);
+          sellerVerified = !!rows[0]?.is_verified;
+        }
+      } catch (err) {
+        // ignore DB errors; default to not verified
+        sellerVerified = false;
+      }
+
+      payload.status = sellerVerified && !hasPhone && !hasSuspicious ? "approved" : "pending";
+    }
+
     if (payload.asking_price === undefined && payload.price !== undefined) {
       payload.asking_price = payload.price;
     }

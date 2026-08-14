@@ -1,4 +1,6 @@
 import EstateModel from "../models/estate.model.js";
+import ImagesModel from "../models/utility.models/images.js";
+import { uploadToCloudinary, toMediaPayload } from "./utillity.controller/images.controller.js";
 
 const ok = (res, data, message = "Success", meta = undefined, status = 200) =>
   res.status(status).json({
@@ -56,6 +58,30 @@ const listMeta = (result) => ({
 
 export const createEstate = wrap(async (req, res) => {
   const estate = await EstateModel.create(req.body || {});
+
+  // Attach uploaded images if provided
+  const files = req.files || (req.file ? [req.file] : []);
+  if (files.length) {
+    const uploads = [];
+    try {
+      for (const file of files) uploads.push(await uploadToCloudinary(file));
+
+      const coverIndex = Number(req.body.coverIndex);
+      const images = uploads.map((upload, index) =>
+        toMediaPayload({
+          propertyId: estate.estate_id,
+          isCover: Number.isInteger(coverIndex) && coverIndex === index,
+          file: files[index],
+          upload,
+        })
+      );
+
+      await ImagesModel.insertMultipleImages(estate.estate_id, images);
+    } catch (err) {
+      console.error("error uploading estate images", err?.message || err);
+    }
+  }
+
   return ok(res, estate, "Estate created successfully", undefined, 201);
 });
 

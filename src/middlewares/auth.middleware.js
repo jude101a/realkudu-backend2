@@ -12,13 +12,23 @@ export const protect = (req, res, next) => {
   }
 
   try {
+    console.log("JWT_SECRET:", process.env.JWT_SECRET);
+    console.log("TOKEN:", token);
+
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+
     req.user = payload;
-    return next();
-  } catch (_) {
+
+    next();
+
+} catch (err) {
+
+    console.error(err);
+
     return res.status(401).json({
-      success: false,
-      error: "Invalid token",
+        success: false,
+        error: err.message,
     });
-  }
+
+}
 };

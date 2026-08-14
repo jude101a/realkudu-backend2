@@ -6,6 +6,16 @@ const SELECT_COLUMNS = `
   imageid AS "imageId",
   property_id AS "propertyId",
   image_url AS "imageUrl",
+  public_id AS "publicId",
+  filename,
+  original_filename AS "originalFilename",
+  mime_type AS "mimeType",
+  resource_type AS "resourceType",
+  bytes AS "size",
+  format,
+  width,
+  height,
+  duration,
   is_cover AS "isCover",
   created_at AS "createdAt",
   updated_at AS "updatedAt",
@@ -13,16 +23,63 @@ const SELECT_COLUMNS = `
 `;
 
 class ImagesModel {
-  static async insertImage({ propertyId, imageUrl, isCover = false }, client = null) {
+  static async insertImage(
+    {
+      propertyId,
+      imageUrl,
+      secureUrl,
+      publicId = null,
+      filename = null,
+      originalFilename = null,
+      mimeType = null,
+      resourceType = "image",
+      size = null,
+      bytes = size,
+      format = null,
+      width = null,
+      height = null,
+      duration = null,
+      isCover = false,
+    },
+    client = null
+  ) {
     const db = client || pool;
 
     const { rows } = await db.query(
       `
-      INSERT INTO ${TABLE} (property_id, image_url, is_cover)
-      VALUES ($1, $2, $3)
+      INSERT INTO ${TABLE} (
+        property_id,
+        image_url,
+        public_id,
+        filename,
+        original_filename,
+        mime_type,
+        resource_type,
+        bytes,
+        format,
+        width,
+        height,
+        duration,
+        is_cover
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING ${SELECT_COLUMNS}
       `,
-      [propertyId, imageUrl, isCover]
+      [
+        propertyId,
+        secureUrl || imageUrl,
+        publicId,
+        filename,
+        originalFilename,
+        mimeType,
+        resourceType,
+        bytes,
+        format,
+        width,
+        height,
+        duration,
+        isCover,
+      ]
     );
 
     return rows[0] || null;
@@ -74,21 +131,45 @@ class ImagesModel {
   const placeholders = [];
 
   images.forEach((img, index) => {
-    const baseIndex = index * 3;
+    const baseIndex = index * 13;
 
     placeholders.push(
-      `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`
+      `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9}, $${baseIndex + 10}, $${baseIndex + 11}, $${baseIndex + 12}, $${baseIndex + 13})`
     );
 
     values.push(
       propertyId,
-      img.imageUrl,
+      img.secureUrl || img.imageUrl,
+      img.publicId ?? null,
+      img.filename ?? null,
+      img.originalFilename ?? null,
+      img.mimeType ?? null,
+      img.resourceType ?? "image",
+      img.bytes ?? img.size ?? null,
+      img.format ?? null,
+      img.width ?? null,
+      img.height ?? null,
+      img.duration ?? null,
       img.isCover ?? false
     );
   });
 
   const query = `
-    INSERT INTO ${TABLE} (property_id, image_url, is_cover)
+    INSERT INTO ${TABLE} (
+      property_id,
+      image_url,
+      public_id,
+      filename,
+      original_filename,
+      mime_type,
+      resource_type,
+      bytes,
+      format,
+      width,
+      height,
+      duration,
+      is_cover
+    )
     VALUES ${placeholders.join(", ")}
     RETURNING ${SELECT_COLUMNS}
   `;
@@ -110,6 +191,40 @@ class ImagesModel {
       RETURNING ${SELECT_COLUMNS}
       `,
       [imageUrl]
+    );
+
+    return rows[0] || null;
+  }
+
+  static async deleteImageById(imageId, client = null) {
+    const db = client || pool;
+
+    const { rows } = await db.query(
+      `
+      UPDATE ${TABLE}
+      SET deleted_at = NOW()
+      WHERE imageid = $1
+        AND deleted_at IS NULL
+      RETURNING ${SELECT_COLUMNS}
+      `,
+      [imageId]
+    );
+
+    return rows[0] || null;
+  }
+
+  static async findImageById(imageId, client = null) {
+    const db = client || pool;
+
+    const { rows } = await db.query(
+      `
+      SELECT ${SELECT_COLUMNS}
+      FROM ${TABLE}
+      WHERE imageid = $1
+        AND deleted_at IS NULL
+      LIMIT 1
+      `,
+      [imageId]
     );
 
     return rows[0] || null;

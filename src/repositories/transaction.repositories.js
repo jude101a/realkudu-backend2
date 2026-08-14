@@ -1,8 +1,72 @@
-import mongoose from "mongoose";
-import Transaction from "../models/transaction.js";
-import {findUserById} from "../models/user.models.js"
+import pool from '../config/db.js';
 
 class TransactionRepository {
+
+    /**
+     * ============================================
+     * HELPERS
+     * ============================================
+     */
+
+    // Joins users + property so every fetch returns populated data
+    #baseSelect = `
+    SELECT
+        t.*,
+
+        -- buyer (from users)
+        json_build_object(
+            'id',         b.id,
+            'name',       CONCAT(b.first_name, ' ', b.last_name),
+            'email',      b.email,
+            'phone',      b.phone_number,
+            'avatar',     b.profile_image_url
+        ) AS buyer,
+
+        -- seller (business identity from sellers, joined via seller_id -> users.id -> sellers.user_id)
+        json_build_object(
+            'id',         se.id,
+            'user_id',    se.user_id,
+            'name',       se.business_name,
+            'email',      se.business_email,
+            'phone',      se.business_phone,
+            'avatar',     se.business_profile_image_url
+        ) AS seller,
+
+        -- agent (also a seller, joined via agent_id -> users.id -> sellers.user_id)
+        json_build_object(
+            'id',         ag.id,
+            'user_id',    ag.user_id,
+            'name',       ag.business_name,
+            'email',      ag.business_email,
+            'phone',      ag.business_phone,
+            'avatar',     ag.business_profile_image_url
+        ) AS agent,
+
+        -- property
+        row_to_json(p.*) AS property
+
+    FROM transactions t
+    LEFT JOIN users     b  ON b.id       = t.buyer_id
+    LEFT JOIN sellers   se ON se.user_id = t.seller_id
+    LEFT JOIN sellers   ag ON ag.user_id = t.agent_id
+    LEFT JOIN property  p  ON p.property_id = t.property_id
+`;
+
+    /**
+     * Build a WHERE clause + values array from a plain filters object.
+     * e.g. { status: 'SUCCESS', buyer_id: uuid }
+     * → WHERE status = $1 AND buyer_id = $2  /  ['SUCCESS', uuid]
+     */
+    #buildWhere(filters, startAt = 1) {
+        const keys = Object.keys(filters);
+        if (!keys.length) return { clause: '', values: [] };
+
+        const clause = 'WHERE ' + keys
+            .map((k, i) => `t.${k} = $${startAt + i}`)
+            .join(' AND ');
+
+        return { clause, values: Object.values(filters) };
+    }
 
     /**
      * ============================================
@@ -10,8 +74,41 @@ class TransactionRepository {
      * ============================================
      */
 
-    async create(payload) {
-        return await Transaction.create(payload);
+    async create({
+        reference,
+        paymentType,
+        propertyId   = null,
+        buyerId      = null,
+        sellerId     = null,
+        agentId      = null,
+        amount,
+        currency     = 'NGN',
+        gateway      = 'PAYSTACK',
+        gatewayReference  = null,
+        authorizationUrl  = null,
+        accessCode        = null,
+        status            = 'PENDING',
+        gatewayResponse   = {},
+    }) {
+        const { rows } = await pool.query(
+            `INSERT INTO transactions (
+                reference, payment_type, property_id, buyer_id, seller_id,
+                agent_id, amount, currency, gateway, gateway_reference,
+                authorization_url, access_code, status, gateway_response
+             ) VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8, $9, $10,
+                $11, $12, $13, $14
+             )
+             RETURNING *`,
+            [
+                reference, paymentType, propertyId, buyerId, sellerId,
+                agentId, amount, currency, gateway, gatewayReference,
+                authorizationUrl, accessCode, status,
+                JSON.stringify(gatewayResponse),
+            ]
+        );
+        return rows[0];
     }
 
     /**
@@ -21,11 +118,11 @@ class TransactionRepository {
      */
 
     async findById(id) {
-        return await findUserById(id)
-            .populate("buyer", "-password")
-            .populate("seller", "-password")
-            .populate("agent", "-password")
-            .populate("property");
+        const { rows } = await pool.query(
+            `${this.#baseSelect} WHERE t.id = $1`,
+            [id]
+        );
+        return rows[0] ?? null;
     }
 
     /**
@@ -35,11 +132,11 @@ class TransactionRepository {
      */
 
     async findByReference(reference) {
-        return await Transaction.findOne({ reference })
-            .populate("buyer", "-password")
-            .populate("seller", "-password")
-            .populate("agent", "-password")
-            .populate("property");
+        const { rows } = await pool.query(
+            `${this.#baseSelect} WHERE t.reference = $1`,
+            [reference]
+        );
+        return rows[0] ?? null;
     }
 
     /**
@@ -49,9 +146,11 @@ class TransactionRepository {
      */
 
     async findByGatewayReference(gatewayReference) {
-        return await Transaction.findOne({
-            gatewayReference
-        });
+        const { rows } = await pool.query(
+            `SELECT * FROM transactions WHERE gateway_reference = $1`,
+            [gatewayReference]
+        );
+        return rows[0] ?? null;
     }
 
     /**
@@ -61,21 +160,14 @@ class TransactionRepository {
      */
 
     async updateStatus(reference, status) {
-
-        return await Transaction.findOneAndUpdate(
-
-            { reference },
-
-            {
-                status
-            },
-
-            {
-                new: true
-            }
-
+        const { rows } = await pool.query(
+            `UPDATE transactions
+             SET status = $1
+             WHERE reference = $2
+             RETURNING *`,
+            [status, reference]
         );
-
+        return rows[0] ?? null;
     }
 
     /**
@@ -85,61 +177,41 @@ class TransactionRepository {
      */
 
     async updateGatewayResponse(reference, gatewayResponse) {
-
-        return await Transaction.findOneAndUpdate(
-
-            { reference },
-
-            {
-
-                gatewayResponse
-
-            },
-
-            {
-
-                new: true
-
-            }
-
+        const { rows } = await pool.query(
+            `UPDATE transactions
+             SET gateway_response = $1
+             WHERE reference = $2
+             RETURNING *`,
+            [JSON.stringify(gatewayResponse), reference]
         );
-
+        return rows[0] ?? null;
     }
 
     /**
      * ============================================
-     * SAVE PAYSTACK DATA
+     * SAVE PAYSTACK INITIALIZATION DATA
      * ============================================
      */
 
     async saveInitialization(reference, data) {
-
-        return await Transaction.findOneAndUpdate(
-
-            { reference },
-
-            {
-
-                authorizationUrl: data.authorization_url,
-
-                accessCode: data.access_code,
-
-                gatewayReference: data.reference,
-
-                gatewayResponse: data,
-
-                status: "INITIALIZED"
-
-            },
-
-            {
-
-                new: true
-
-            }
-
+        const { rows } = await pool.query(
+            `UPDATE transactions
+             SET authorization_url = $1,
+                 access_code       = $2,
+                 gateway_reference = $3,
+                 gateway_response  = $4,
+                 status            = 'INITIALIZED'
+             WHERE reference = $5
+             RETURNING *`,
+            [
+                data.authorization_url,
+                data.access_code,
+                data.reference,
+                JSON.stringify(data),
+                reference,
+            ]
         );
-
+        return rows[0] ?? null;
     }
 
     /**
@@ -149,31 +221,15 @@ class TransactionRepository {
      */
 
     async markSuccessful(reference, gatewayResponse) {
-
-        return await Transaction.findOneAndUpdate(
-
-            {
-
-                reference
-
-            },
-
-            {
-
-                status: "SUCCESS",
-
-                gatewayResponse
-
-            },
-
-            {
-
-                new: true
-
-            }
-
+        const { rows } = await pool.query(
+            `UPDATE transactions
+             SET status           = 'SUCCESS',
+                 gateway_response = $1
+             WHERE reference = $2
+             RETURNING *`,
+            [JSON.stringify(gatewayResponse), reference]
         );
-
+        return rows[0] ?? null;
     }
 
     /**
@@ -183,30 +239,15 @@ class TransactionRepository {
      */
 
     async markFailed(reference, gatewayResponse = {}) {
-        return await Transaction.findOneAndUpdate(
-
-            {
-
-                reference
-
-            },
-
-            {
-
-                status: "FAILED",
-
-                gatewayResponse
-
-            },
-
-            {
-
-                new: true
-
-            }
-
+        const { rows } = await pool.query(
+            `UPDATE transactions
+             SET status           = 'FAILED',
+                 gateway_response = $1
+             WHERE reference = $2
+             RETURNING *`,
+            [JSON.stringify(gatewayResponse), reference]
         );
-
+        return rows[0] ?? null;
     }
 
     /**
@@ -216,29 +257,14 @@ class TransactionRepository {
      */
 
     async markCancelled(reference) {
-
-        return await Transaction.findOneAndUpdate(
-
-            {
-
-                reference
-
-            },
-
-            {
-
-                status: "CANCELLED"
-
-            },
-
-            {
-
-                new: true
-
-            }
-
+        const { rows } = await pool.query(
+            `UPDATE transactions
+             SET status = 'CANCELLED'
+             WHERE reference = $1
+             RETURNING *`,
+            [reference]
         );
-
+        return rows[0] ?? null;
     }
 
     /**
@@ -248,31 +274,15 @@ class TransactionRepository {
      */
 
     async markRefunded(reference, refundData) {
-
-        return await Transaction.findOneAndUpdate(
-
-            {
-
-                reference
-
-            },
-
-            {
-
-                status: "REFUNDED",
-
-                refund: refundData
-
-            },
-
-            {
-
-                new: true
-
-            }
-
+        const { rows } = await pool.query(
+            `UPDATE transactions
+             SET status           = 'REFUNDED',
+                 gateway_response = gateway_response || $1::jsonb
+             WHERE reference = $2
+             RETURNING *`,
+            [JSON.stringify({ refund: refundData }), reference]
         );
-
+        return rows[0] ?? null;
     }
 
     /**
@@ -282,17 +292,13 @@ class TransactionRepository {
      */
 
     async findByProperty(propertyId) {
-
-        return await Transaction.find({
-
-            property: propertyId
-
-        }).sort({
-
-            createdAt: -1
-
-        });
-
+        const { rows } = await pool.query(
+            `SELECT * FROM transactions
+             WHERE property_id = $1
+             ORDER BY created_at DESC`,
+            [propertyId]
+        );
+        return rows;
     }
 
     /**
@@ -302,17 +308,13 @@ class TransactionRepository {
      */
 
     async findBuyerTransactions(buyerId) {
-
-        return await Transaction.find({
-
-            buyer: buyerId
-
-        }).sort({
-
-            createdAt: -1
-
-        });
-
+        const { rows } = await pool.query(
+            `SELECT * FROM transactions
+             WHERE buyer_id = $1
+             ORDER BY created_at DESC`,
+            [buyerId]
+        );
+        return rows;
     }
 
     /**
@@ -322,17 +324,13 @@ class TransactionRepository {
      */
 
     async findSellerTransactions(sellerId) {
-
-        return await Transaction.find({
-
-            seller: sellerId
-
-        }).sort({
-
-            createdAt: -1
-
-        });
-
+        const { rows } = await pool.query(
+            `SELECT * FROM transactions
+             WHERE seller_id = $1
+             ORDER BY created_at DESC`,
+            [sellerId]
+        );
+        return rows;
     }
 
     /**
@@ -342,132 +340,76 @@ class TransactionRepository {
      */
 
     async findAgentTransactions(agentId) {
-
-        return await Transaction.find({
-
-            agent: agentId
-
-        }).sort({
-
-            createdAt: -1
-
-        });
-
+        const { rows } = await pool.query(
+            `SELECT * FROM transactions
+             WHERE agent_id = $1
+             ORDER BY created_at DESC`,
+            [agentId]
+        );
+        return rows;
     }
 
     /**
      * ============================================
-     * PENDING
+     * FIND BY STATUS (internal helper)
      * ============================================
      */
 
-    async findPendingTransactions() {
-
-        return await Transaction.find({
-
-            status: "PENDING"
-
-        });
-
+    async #findByStatus(status) {
+        const { rows } = await pool.query(
+            `SELECT * FROM transactions WHERE status = $1`,
+            [status]
+        );
+        return rows;
     }
 
-    /**
-     * ============================================
-     * SUCCESSFUL
-     * ============================================
-     */
-
-    async findSuccessfulTransactions() {
-
-        return await Transaction.find({
-
-            status: "SUCCESS"
-
-        });
-
-    }
-
-    /**
-     * ============================================
-     * INITIALIZED
-     * ============================================
-     */
-
-    async findInitializedTransactions() {
-
-        return await Transaction.find({
-
-            status: "INITIALIZED"
-
-        });
-
-    }
-
-    /**
-     * ============================================
-     * PROCESSING
-     * ============================================
-     */
-
-    async findProcessingTransactions() {
-
-        return await Transaction.find({
-
-            status: "PROCESSING"
-
-        });
-
-    }
+    async findPendingTransactions()     { return this.#findByStatus('PENDING');     }
+    async findSuccessfulTransactions()  { return this.#findByStatus('SUCCESS');     }
+    async findInitializedTransactions() { return this.#findByStatus('INITIALIZED'); }
+    async findProcessingTransactions()  { return this.#findByStatus('PROCESSING');  }
 
     /**
      * ============================================
      * PAGINATION
+     * Filters keys must match column names exactly
+     * e.g. { status: 'SUCCESS', buyer_id: uuid }
      * ============================================
      */
 
-    async paginate({
+    async paginate({ page = 1, limit = 20, filters = {}, sort = 'created_at DESC' }) {
+        const offset = (page - 1) * limit;
+        const { clause, values } = this.#buildWhere(filters);
 
-        page = 1,
+        // Whitelist sort to prevent SQL injection
+        const safeSort = /^[a-z_]+ (ASC|DESC)$/i.test(sort) ? sort : 'created_at DESC';
 
-        limit = 20,
+        const dataQuery = `
+            ${this.#baseSelect}
+            ${clause}
+            ORDER BY t.${safeSort}
+            LIMIT $${values.length + 1}
+            OFFSET $${values.length + 2}
+        `;
 
-        filters = {},
+        const countQuery = `
+            SELECT COUNT(*) FROM transactions t
+            ${clause}
+        `;
 
-        sort = { createdAt: -1 }
-
-    }) {
-
-        const skip = (page - 1) * limit;
-
-        const [rows, total] = await Promise.all([
-
-            Transaction.find(filters)
-                .sort(sort)
-                .skip(skip)
-                .limit(limit)
-                .populate("buyer", "-password")
-                .populate("seller", "-password")
-                .populate("agent", "-password")
-                .populate("property"),
-
-            countDocuments(filters)
-
+        const [{ rows }, { rows: countRows }] = await Promise.all([
+            pool.query(dataQuery,  [...values, limit, offset]),
+            pool.query(countQuery, values),
         ]);
 
+        const total = parseInt(countRows[0].count, 10);
+
         return {
-
             rows,
-
             total,
-
             page,
-
             pages: Math.ceil(total / limit),
-
-            limit
-
+            limit,
         };
-
     }
 
     /**
@@ -477,132 +419,58 @@ class TransactionRepository {
      */
 
     async exists(reference) {
-
-        return await Transaction._exists({
-
-            reference
-
-        });
-
+        const { rows } = await pool.query(
+            `SELECT 1 FROM transactions WHERE reference = $1 LIMIT 1`,
+            [reference]
+        );
+        return rows.length > 0;
     }
 
     /**
      * ============================================
-     * DELETE
-     * (Only for development)
+     * DELETE (development only)
      * ============================================
      */
 
     async delete(reference) {
-
-        return await Transaction.deleteOne({
-
-            reference
-
-        });
-
+        const { rowCount } = await pool.query(
+            `DELETE FROM transactions WHERE reference = $1`,
+            [reference]
+        );
+        return rowCount > 0;
     }
 
     /**
      * ============================================
-     * AGGREGATE TOTAL REVENUE
+     * AGGREGATE — TOTAL REVENUE
      * ============================================
      */
 
     async totalRevenue() {
-
-        const result = await Transaction.aggregate([
-
-            {
-
-                $match: {
-
-                    status: "SUCCESS"
-
-                }
-
-            },
-
-            {
-
-                $group: {
-
-                    _id: null,
-
-                    total: {
-
-                        $sum: "$amount"
-
-                    }
-
-                }
-
-            }
-
-        ]);
-
-        return result[0]?.total || 0;
-
+        const { rows } = await pool.query(
+            `SELECT COALESCE(SUM(amount), 0) AS total
+             FROM transactions
+             WHERE status = 'SUCCESS'`
+        );
+        return parseFloat(rows[0].total);
     }
 
     /**
      * ============================================
-     * TODAY'S REVENUE
+     * AGGREGATE — TODAY'S REVENUE
      * ============================================
      */
 
     async todayRevenue() {
-
-        const start = new Date();
-
-        start.setHours(0,0,0,0);
-
-        const end = new Date();
-
-        end.setHours(23,59,59,999);
-
-        const result = await Transaction.aggregate([
-
-            {
-
-                $match: {
-
-                    status: "SUCCESS",
-
-                    createdAt: {
-
-                        $gte: start,
-
-                        $lte: end
-
-                    }
-
-                }
-
-            },
-
-            {
-
-                $group: {
-
-                    _id: null,
-
-                    total: {
-
-                        $sum: "$amount"
-
-                    }
-
-                }
-
-            }
-
-        ]);
-
-        return result[0]?.total || 0;
-
+        const { rows } = await pool.query(
+            `SELECT COALESCE(SUM(amount), 0) AS total
+             FROM transactions
+             WHERE status     = 'SUCCESS'
+               AND created_at >= CURRENT_DATE
+               AND created_at <  CURRENT_DATE + INTERVAL '1 day'`
+        );
+        return parseFloat(rows[0].total);
     }
-
 }
 
 export default new TransactionRepository();

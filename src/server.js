@@ -1,4 +1,5 @@
 import "./config/env.js";
+import "./config/instrument.js";
 import "./workers/notification.worker.js";
 import app from "./app.js";
 import { ensureDatabaseConnectivity } from "./config/db.js";
@@ -6,6 +7,9 @@ import { initializeDatabaseTablesSafe } from "./data/initDb.safe.js";
 import { transporter } from "./utils/email.js";
 
 const PORT = process.env.PORT || 5001;
+const requireDbOnStartup =
+  process.env.REQUIRE_DB_ON_STARTUP === "true" ||
+  process.env.NODE_ENV === "production";
 const requireSmtpOnStartup = process.env.REQUIRE_SMTP_ON_STARTUP === "true";
 
 const validateStartupEnv = () => {
@@ -71,11 +75,22 @@ const start = async () => {
   try {
     validateStartupEnv();
 
-    await ensureDatabaseConnectivity();
-    console.log("✅ Database connection successful");
+    try {
+      await ensureDatabaseConnectivity();
+      console.log("✅ Database connection successful");
 
-    await initializeDatabaseTablesSafe();
-    console.log("✅ Database tables ensured");
+      await initializeDatabaseTablesSafe();
+      console.log("✅ Database tables ensured");
+    } catch (dbErr) {
+      const dbMessage = formatDbError(dbErr);
+      if (requireDbOnStartup) {
+        throw new Error(dbMessage);
+      }
+      console.warn(`⚠️ Database unavailable: ${dbMessage}`);
+      console.warn(
+        "⚠️ Continuing startup because REQUIRE_DB_ON_STARTUP is not true."
+      );
+    }
 
     try {
       await transporter.verify();

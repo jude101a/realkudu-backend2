@@ -1,10 +1,44 @@
 import pool from "../config/db.js";
 
-const MIGRATION_NAME = "bootstrap_schema_v1";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v10";
+const MIGRATION_NAME = "bootstrap_schema_v3";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v11";
 
-
-
+const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
+  PropertyType: [
+    "house",
+    "land",
+    "estate",
+    "commercial",
+    "apartment",
+    "shop",
+    "office",
+    "warehouse",
+    "hotel",
+    "shortlet",
+    "houseForSale",
+    "unknown",
+  ],
+  payment_type: [
+    "BOOKING",
+    "BALANCE",
+    "PROPERTY_PURCHASE",
+    "RENT",
+    "SUBSCRIPTION",
+    "INSPECTION",
+  ],
+  transaction_status: [
+    "PENDING",
+    "INITIALIZED",
+    "PROCESSING",
+    "SUCCESS",
+    "FAILED",
+    "CANCELLED",
+    "REFUNDED",
+    "EXPIRED",
+  ],
+  escrow_status: ["PENDING", "HELD", "ACTIVE", "RELEASED", "DISPUTED", "CANCELLED", "REFUNDED"],
+  transfer_status: ["PENDING", "PROCESSING", "SUCCESS", "FAILED", "REVERSED"],
+});
 
 const PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS = Object.freeze([
   { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
@@ -204,6 +238,89 @@ const FINANCE_ACCOUNT_RECONCILIATION_COLUMNS = Object.freeze([
   { name: "is_active", typeSql: "BOOLEAN", defaultSql: "TRUE" },
   { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
   { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const TRANSFERS_TABLE_COLUMNS = Object.freeze([
+  { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
+  { name: "reference", typeSql: "TEXT" },
+  { name: "escrow_id", typeSql: "UUID" },
+  { name: "seller_id", typeSql: "UUID" },
+  { name: "recipient_code", typeSql: "TEXT" },
+  { name: "amount", typeSql: "NUMERIC(15,2)" },
+  { name: "platform_fee", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "agent_commission", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "payout_amount", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "status", typeSql: "transfer_status", defaultSql: "'PENDING'" },
+  { name: "gateway_response", typeSql: "JSONB", defaultSql: "'{}'" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const TRANSACTIONS_TABLE_COLUMNS = Object.freeze([
+  { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
+  { name: "reference", typeSql: "TEXT" },
+  { name: "payment_type", typeSql: "payment_type" },
+  { name: "property_id", typeSql: "UUID" },
+  { name: "buyer_id", typeSql: "UUID" },
+  { name: "seller_id", typeSql: "UUID" },
+  { name: "agent_id", typeSql: "UUID" },
+  { name: "amount", typeSql: "NUMERIC(15,2)" },
+  { name: "currency", typeSql: "TEXT", defaultSql: "'NGN'" },
+  { name: "gateway", typeSql: "TEXT", defaultSql: "'PAYSTACK'" },
+  { name: "gateway_reference", typeSql: "TEXT" },
+  { name: "authorization_url", typeSql: "TEXT" },
+  { name: "access_code", typeSql: "TEXT" },
+  { name: "status", typeSql: "transaction_status", defaultSql: "'PENDING'" },
+  { name: "gateway_response", typeSql: "JSONB", defaultSql: "'{}'" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const ESCROWS_TABLE_COLUMNS = Object.freeze([
+  { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
+  { name: "transaction_id", typeSql: "UUID" },
+  { name: "property_id", typeSql: "UUID" },
+  { name: "buyer_id", typeSql: "UUID" },
+  { name: "seller_id", typeSql: "UUID" },
+  { name: "agent_id", typeSql: "UUID" },
+  { name: "status", typeSql: "escrow_status", defaultSql: "'PENDING'" },
+  { name: "released_at", typeSql: "TIMESTAMPTZ" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const IMAGES_TABLE_COLUMNS = Object.freeze([
+  { name: "image_url", typeSql: "TEXT" },
+  { name: "public_id", typeSql: "TEXT" },
+  { name: "filename", typeSql: "TEXT" },
+  { name: "original_filename", typeSql: "TEXT" },
+  { name: "mime_type", typeSql: "TEXT" },
+  { name: "resource_type", typeSql: "VARCHAR(20)", defaultSql: "'image'" },
+  { name: "bytes", typeSql: "BIGINT" },
+  { name: "format", typeSql: "TEXT" },
+  { name: "width", typeSql: "INTEGER" },
+  { name: "height", typeSql: "INTEGER" },
+  { name: "duration", typeSql: "NUMERIC(12,3)" },
+  { name: "is_cover", typeSql: "BOOLEAN", defaultSql: "FALSE" },
+  { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
+  { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+]);
+
+const WALLET_LEDGER_TABLE_COLUMNS = Object.freeze([
+  { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
+  { name: "seller_id", typeSql: "UUID" },
+  { name: "entry_type", typeSql: "VARCHAR(50)" },
+  { name: "direction", typeSql: "VARCHAR(10)" },
+  { name: "amount", typeSql: "NUMERIC(15,2)" },
+  { name: "balance_after", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "currency", typeSql: "VARCHAR(10)", defaultSql: "'NGN'" },
+  { name: "reference", typeSql: "TEXT" },
+  { name: "escrow_id", typeSql: "UUID" },
+  { name: "transaction_id", typeSql: "UUID" },
+  { name: "transfer_id", typeSql: "UUID" },
+  { name: "description", typeSql: "TEXT" },
+  { name: "metadata", typeSql: "JSONB", defaultSql: "'{}'" },
+  { name: "created_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
 ]);
 
 const REVIEW_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
@@ -506,7 +623,6 @@ async function ensureUpdatedAtTriggerForTable(client, tableName) {
   `);
 }
 
-
 async function createPurchaseProcessTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS purchase_process_inspection_payments (
@@ -603,6 +719,17 @@ async function ensureForeignKeyConstraint(
 
 async function ensurePurchaseProcessIndexes(client) {
   const statements = [
+    `CREATE INDEX IF NOT EXISTS idx_escrows_transaction_id ON escrows(transaction_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_property_id    ON escrows(property_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_buyer_id       ON escrows(buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_seller_id      ON escrows(seller_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_status         ON escrows(status)`,
+
+    `CREATE INDEX IF NOT EXISTS idx_transactions_reference  ON transactions(reference)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_buyer_id   ON transactions(buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_seller_id  ON transactions(seller_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_property_id ON transactions(property_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_status     ON transactions(status)`,
     `DROP INDEX IF EXISTS idx_purchase_process_inspection_payments_property_buyer`,
     `DROP INDEX IF EXISTS idx_purchase_process_contract_uploads_property_buyer`,
     `DROP INDEX IF EXISTS idx_purchase_process_inspection_payments_property_id`,
@@ -660,24 +787,6 @@ async function ensurePurchaseProcessBuyerForeignKeys(client) {
       );
     }
   );
-}
-
-async function ensurePurchaseProcessTablesHotfix(client) {
-  await createPurchaseProcessTables(client);
-  await ensureTableColumns(
-    client,
-    "purchase_process_inspection_payments",
-    PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS
-  );
-  await ensureTableColumns(
-    client,
-    "purchase_process_contract_uploads",
-    PURCHASE_PROCESS_CONTRACT_UPLOAD_COLUMNS
-  );
-  await ensurePurchaseProcessBuyerForeignKeys(client);
-  await ensureUpdatedAtTriggerForTable(client, "purchase_process_inspection_payments");
-  await ensureUpdatedAtTriggerForTable(client, "purchase_process_contract_uploads");
-  await ensurePurchaseProcessIndexes(client);
 }
 
 async function ensurePropertyTableForeignKeys(client) {
@@ -928,30 +1037,41 @@ async function ensureNotificationTables(client) {
   `);
 }
 
+async function createEnumIfMissing(client, typeName, values) {
+
+  const enumValuesSql = values
+    .map(value => `'${String(value).replace(/'/g, "''")}'`)
+    .join(", ");
+
+  const sql = `
+DO $$
+BEGIN
+    CREATE TYPE ${typeName} AS ENUM (${enumValuesSql});
+EXCEPTION
+    WHEN duplicate_object THEN
+        NULL;
+END
+$$;
+`;
+
+  await client.query(sql);
+
+  for (const value of values) {
+    const escapedValue = String(value).replace(/'/g, "''");
+    await client.query(`ALTER TYPE ${typeName} ADD VALUE IF NOT EXISTS '${escapedValue}'`);
+  }
+}
+
 async function ensureCustomTypes(client) {
-  await client.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_type WHERE typname = 'propertytype'
-      ) THEN
-        CREATE TYPE PropertyType AS ENUM (
-          'house',
-          'land',
-          'estate',
-          'commercial',
-          'apartment',
-          'shop',
-          'office',
-          'warehouse',
-          'hotel',
-          'shortlet',
-          'houseForSale',
-          'unknown'
-        );
-      END IF;
-    END$$;
-  `);
+
+  for (const [typeName, values] of Object.entries(CUSTOM_ENUM_DEFINITIONS)) {
+
+    console.log("[DB] Ensuring enum:", typeName);
+
+    await createEnumIfMissing(client, typeName, values);
+
+  }
+
 }
 
 async function createPropertyTables(client) {
@@ -978,6 +1098,16 @@ async function createPropertyTables(client) {
   property_id UUID NOT NULL,
 
   image_url TEXT NOT NULL,
+  public_id TEXT,
+  filename TEXT,
+  original_filename TEXT,
+  mime_type TEXT,
+  resource_type VARCHAR(20) DEFAULT 'image',
+  bytes BIGINT,
+  format TEXT,
+  width INTEGER,
+  height INTEGER,
+  duration NUMERIC(12,3),
 
   is_cover BOOLEAN DEFAULT FALSE,
 
@@ -986,6 +1116,7 @@ async function createPropertyTables(client) {
   deleted_at TIMESTAMPTZ
 );
   `);
+  await ensureTableColumns(client, "images", IMAGES_TABLE_COLUMNS);
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS houses (
@@ -1101,12 +1232,23 @@ async function ensureImagesTableHotfix(client) {
       imageId UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       property_id UUID NOT NULL,
       image_url TEXT NOT NULL,
+      public_id TEXT,
+      filename TEXT,
+      original_filename TEXT,
+      mime_type TEXT,
+      resource_type VARCHAR(20) DEFAULT 'image',
+      bytes BIGINT,
+      format TEXT,
+      width INTEGER,
+      height INTEGER,
+      duration NUMERIC(12,3),
       is_cover BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       deleted_at TIMESTAMPTZ
     );
   `);
+  await ensureTableColumns(client, "images", IMAGES_TABLE_COLUMNS);
 
   await ensureUpdatedAtTriggerForTable(client, "images");
 
@@ -1131,8 +1273,7 @@ const STARTUP_SCHEMA_RECONCILIATION = Object.freeze({
     { name: "cover_image_url", typeSql: "TEXT" },
   ],
   images: [
-    { name: "deleted_at", typeSql: "TIMESTAMPTZ" },
-    { name: "updated_at", typeSql: "TIMESTAMPTZ", defaultSql: "NOW()" },
+    ...IMAGES_TABLE_COLUMNS,
   ],
   purchase_process_inspection_payments:
     PURCHASE_PROCESS_INSPECTION_PAYMENT_COLUMNS,
@@ -1193,6 +1334,8 @@ async function ensureAdminColumns(client) {
 }
 
 async function createFinanceAndOpsTables(client) {
+  await ensureSetUpdatedAtFunction(client);
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS tenant_meta (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1238,6 +1381,26 @@ async function createFinanceAndOpsTables(client) {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS wallet_ledger (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      entry_type VARCHAR(50) NOT NULL,
+      direction VARCHAR(10) NOT NULL CHECK (direction IN ('CREDIT', 'DEBIT')),
+      amount NUMERIC(15,2) NOT NULL CHECK (amount >= 0),
+      balance_after NUMERIC(15,2) NOT NULL DEFAULT 0,
+      currency VARCHAR(10) NOT NULL DEFAULT 'NGN',
+      reference TEXT NOT NULL UNIQUE,
+      escrow_id UUID,
+      transaction_id UUID,
+      transfer_id UUID,
+      description TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await ensureTableColumns(client, "wallet_ledger", WALLET_LEDGER_TABLE_COLUMNS);
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS reviews (
@@ -1287,19 +1450,109 @@ async function createFinanceAndOpsTables(client) {
   await ensurePurchaseProcessBuyerForeignKeys(client);
 
   await client.query(`
-    CREATE TABLE IF NOT EXISTS transactions (
+    CREATE TABLE IF NOT EXISTS transfers (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      type VARCHAR(50) NOT NULL,
-      amount NUMERIC(15,2) NOT NULL CHECK (amount > 0),
-      currency VARCHAR(10) DEFAULT 'NGN',
-      status VARCHAR(30) NOT NULL DEFAULT 'pending',
-      description TEXT,
-      reference_code VARCHAR(100) UNIQUE,
-      metadata JSONB,
+      reference TEXT NOT NULL UNIQUE,
+      escrow_id UUID,
+      seller_id UUID,
+      recipient_code TEXT,
+      amount NUMERIC(15,2),
+      platform_fee NUMERIC(15,2) DEFAULT 0,
+      agent_commission NUMERIC(15,2) DEFAULT 0,
+      payout_amount NUMERIC(15,2) DEFAULT 0,
+      status transfer_status NOT NULL DEFAULT 'PENDING',
+      gateway_response JSONB NOT NULL DEFAULT '{}',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+  await ensureTableColumns(client, "transfers", TRANSFERS_TABLE_COLUMNS);
+
+  
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      reference TEXT NOT NULL UNIQUE,
+      payment_type payment_type NOT NULL,
+      property_id UUID REFERENCES property(property_id) ON DELETE SET NULL,
+      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      seller_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      amount NUMERIC(15, 2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      gateway TEXT NOT NULL DEFAULT 'PAYSTACK',
+      gateway_reference TEXT,
+      authorization_url TEXT,
+      access_code TEXT,
+      status transaction_status NOT NULL DEFAULT 'PENDING',
+      gateway_response JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await ensureTableColumns(client, "transactions", TRANSACTIONS_TABLE_COLUMNS);
+  console.log("[DB] Dropping NOT NULL on transactions.user_id...");
+await client.query(`
+    ALTER TABLE transactions DROP COLUMN IF EXISTS user_id;
+    ALTER TABLE transactions DROP COLUMN IF EXISTS type;
+`);
+  
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS escrows (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      transaction_id UUID NOT NULL UNIQUE REFERENCES transactions(id) ON DELETE CASCADE,
+      property_id UUID REFERENCES property(property_id) ON DELETE SET NULL,
+      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      seller_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      status escrow_status NOT NULL DEFAULT 'PENDING',
+      released_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await ensureTableColumns(client, "escrows", ESCROWS_TABLE_COLUMNS);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_transfers_reference ON transfers(reference);
+    CREATE INDEX IF NOT EXISTS idx_transfers_status ON transfers(status);
+    CREATE INDEX IF NOT EXISTS idx_escrows_transaction_id ON escrows(transaction_id);
+    CREATE INDEX IF NOT EXISTS idx_escrows_property_id ON escrows(property_id);
+    CREATE INDEX IF NOT EXISTS idx_escrows_buyer_id ON escrows(buyer_id);
+    CREATE INDEX IF NOT EXISTS idx_escrows_seller_id ON escrows(seller_id);
+    CREATE INDEX IF NOT EXISTS idx_escrows_status ON escrows(status);
+    CREATE INDEX IF NOT EXISTS idx_transactions_reference ON transactions(reference);
+    CREATE INDEX IF NOT EXISTS idx_transactions_buyer_id ON transactions(buyer_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_seller_id ON transactions(seller_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_property_id ON transactions(property_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+    CREATE INDEX IF NOT EXISTS idx_wallet_ledger_seller_created ON wallet_ledger(seller_id, created_at DESC);
+  `);
+
+  await client.query(`
+    DROP TRIGGER IF EXISTS transfers_updated_at ON transfers;
+
+CREATE TRIGGER transfers_updated_at
+BEFORE UPDATE ON transfers
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+  `);
+
+  await client.query(`
+    DROP TRIGGER IF EXISTS escrows_updated_at ON escrows;
+
+CREATE TRIGGER escrows_updated_at
+BEFORE UPDATE ON escrows
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();  `);
+
+  await client.query(`
+    DROP TRIGGER IF EXISTS transactions_updated_at ON transactions;
+    CREATE TRIGGER transactions_updated_at
+      BEFORE UPDATE ON transactions
+      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   `);
 
   await client.query(`
@@ -1336,6 +1589,8 @@ async function ensureUpdatedAtTrigger(client) {
     "purchase_process_inspection_payments",
     "purchase_process_contract_uploads",
     "images",
+    "transfers",
+    "escrows",
     "transactions",
   ];
 
@@ -1358,6 +1613,7 @@ async function ensureIndexes(client) {
     ...PROPERTY_TABLE_INDEXES,
     `CREATE INDEX IF NOT EXISTS idx_tenant_meta_tenant_id ON tenant_meta(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_finance_accounts_user_id ON finance_accounts(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_wallet_ledger_seller_created ON wallet_ledger(seller_id, created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_property_orders_buyer_id ON property_orders(buyer_id)`,
     `CREATE INDEX IF NOT EXISTS idx_property_orders_property ON property_orders(property_type, property_id)`,
@@ -1367,10 +1623,18 @@ async function ensureIndexes(client) {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_property_buyer ON purchase_process_contract_uploads(property_id, buyer_id)`,
     `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_property_id ON purchase_process_contract_uploads(property_id)`,
     `CREATE INDEX IF NOT EXISTS idx_purchase_process_contract_uploads_buyer_id ON purchase_process_contract_uploads(buyer_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_transfers_reference ON transfers(reference)`,
+    `CREATE INDEX IF NOT EXISTS idx_transfers_status ON transfers(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_transaction_id ON escrows(transaction_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_property_id ON escrows(property_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_buyer_id ON escrows(buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_seller_id ON escrows(seller_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_escrows_status ON escrows(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_reference ON transactions(reference)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_buyer_id ON transactions(buyer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_seller_id ON transactions(seller_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_transactions_property_id ON transactions(property_id)`,
     `CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_reference_code ON transactions(reference_code) WHERE reference_code IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_admin_id ON admin_activity_logs(admin_id)`,
     `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs(created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_action ON admin_activity_logs(action)`,
@@ -1389,51 +1653,36 @@ export async function initializeDatabaseTablesSafe() {
     console.log("[DB] migration started");
 
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
-    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-      MIGRATION_NAME,
-    ]);
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [MIGRATION_NAME]);
 
-    await runStep(client, "extensions", async () => ensureExtensions(client));
-    await runStep(client, "_migration_history", async () =>
-      ensureMigrationHistory(client)
-    );
-    await runStep(client, "core tables", async () => createCoreTables(client));
-    await runStep(client, "ensure admin columns", async () => ensureAdminColumns(client));
-    await runStep(client, "property tables", async () => createPropertyTables(client));
-
-    await runStep(client, "images table hotfix", async () =>
-      ensureImagesTableHotfix(client)
-    );
-  
-    await runStep(client, "purchase process tables hotfix", async () =>
-      ensurePurchaseProcessTablesHotfix(client)
-    );
-
-    await runStep(client, "ensure notification tables", async () =>
-      ensureNotificationTables(client)
-    );
-
-    await runStep(client, "startup schema reconciliation", async () =>
-      ensureStartupSchemaReconciliation(client)
-    );
+    await runStep(client, "extensions", () => ensureExtensions(client));
+    await runStep(client, "_migration_history", () => ensureMigrationHistory(client));
 
     if (await alreadyApplied(client)) {
       await client.query("COMMIT");
       console.log("[DB] migration skipped (already applied)");
       return { success: true, skipped: true };
     }
-    await runStep(client, "custom types", async () =>
-      ensureCustomTypes(client)
-    );
-    await runStep(client, "finance and ops tables", async () =>
-      createFinanceAndOpsTables(client)
-    );
-    await runStep(client, "updated_at triggers", async () =>
-      ensureUpdatedAtTrigger(client)
-    );
-    await runStep(client, "indexes", async () => ensureIndexes(client));
+
+    await runStep(client, "custom types", () => ensureCustomTypes(client));
+    await runStep(client, "core tables", () => createCoreTables(client));
+    await runStep(client, "ensure admin columns", () => ensureAdminColumns(client));
+    await runStep(client, "property tables", () => createPropertyTables(client));
+
+    // creates transfers, transactions, escrows, purchase_process_* tables
+    await runStep(client, "finance and ops tables", () => createFinanceAndOpsTables(client));
+
+    // MUST run after escrows/transactions exist — this is what was crashing
+    await runStep(client, "purchase process indexes", () => ensurePurchaseProcessIndexes(client));
+
+    await runStep(client, "images table hotfix", () => ensureImagesTableHotfix(client));
+    await runStep(client, "updated_at triggers", () => ensureUpdatedAtTrigger(client));
+    await runStep(client, "ensure notification tables", () => ensureNotificationTables(client));
+    await runStep(client, "startup schema reconciliation", () => ensureStartupSchemaReconciliation(client));
+    await runStep(client, "indexes", () => ensureIndexes(client));
 
     const executionTimeMs = Date.now() - startedAt;
+    // ... rest unchanged (insert into _migration_history, COMMIT, etc.)
     await client.query(
       `
         INSERT INTO _migration_history (

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import PaymentService from "../services/payment.js";
 
 class PaymentController {
@@ -5,6 +6,14 @@ class PaymentController {
     async initialize(req, res, next) {
 
         try {
+             console.log("✅ Payment initialize controller reached");
+
+            if (!req.user?.id) {
+                return res.status(401).json({
+                    success: false,
+                    error: "Unauthorized"
+                });
+            }
 
             const result = await PaymentService.initialize({
 
@@ -39,7 +48,7 @@ class PaymentController {
     async verify(req, res, next) {
 
         try {
-
+             console.log("✅ Payment verify controller reached");
             const transaction =
 
                 await PaymentService.verify(
@@ -67,6 +76,12 @@ class PaymentController {
     async history(req, res, next) {
 
         try {
+            if (!req.user?.id) {
+                return res.status(401).json({
+                    success: false,
+                    error: "Unauthorized"
+                });
+            }
 
             const history =
 
@@ -120,6 +135,42 @@ class PaymentController {
 
     }
 
+
+    async webhook(req, res) {
+    try {
+        const secretKey = process.env.PAYSTACK_SECRET_KEY;
+
+        // req.body is a raw Buffer here because of express.raw()
+        const hash = crypto
+            .createHmac("sha512", secretKey)
+            .update(req.body)
+            .digest("hex");
+
+        const signature = req.headers["x-paystack-signature"];
+
+        if (hash !== signature) {
+            console.warn("⚠️ Invalid Paystack webhook signature");
+            return res.status(401).send("Invalid signature");
+        }
+
+        // Now safe to parse
+        const event = JSON.parse(req.body.toString());
+
+        // Respond 200 immediately — Paystack requires fast ack
+        res.status(200).send("OK");
+
+        // Process asynchronously after responding
+        await PaymentService.handleWebhookEvent(event);
+
+    } catch (err) {
+        console.error("Webhook processing error:", err);
+        // Still return 200 if signature was valid but processing failed,
+        // so Paystack doesn't endlessly retry — log and fix manually instead
+        if (!res.headersSent) {
+            res.status(200).send("OK");
+        }
+    }
+}
     async refund(req, res, next) {
 
         try {
@@ -156,7 +207,7 @@ class PaymentController {
 
             const result =
 
-                await _createTransferRecipient({
+                await PaymentService.createTransferRecipient({
 
                     name: req.body.name,
 

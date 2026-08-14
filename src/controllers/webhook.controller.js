@@ -1,4 +1,4 @@
-import {WebhookService} from "../services/webhooks.service.js";
+import WebhookService from "../services/webhooks.service.js";
 
 class WebhookController {
 

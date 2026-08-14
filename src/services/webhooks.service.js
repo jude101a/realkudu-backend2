@@ -526,4 +526,5 @@ break;
 }
 }
 
-export { WebhookService};
+export { WebhookService };
+export default new WebhookService();

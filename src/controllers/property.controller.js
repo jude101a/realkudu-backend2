@@ -1,4 +1,9 @@
 import PropertyModel from "../models/property.model.js";
+import ImagesModel from "../models/utility.models/images.js";
+import {
+  uploadToCloudinary,
+  toMediaPayload,
+} from "../controllers/utillity.controller/images.controller.js";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -144,6 +149,33 @@ export const createProperty = wrap(async (req, res) => {
   if (!validateUuidField(res, payload.buyerId, "buyerId", false)) return;
 
   const created = await PropertyModel.create(payload);
+
+  // If files were uploaded in the same request, upload them and associate with property
+  const files = req.files || (req.file ? [req.file] : []);
+  if (files.length) {
+    const uploads = [];
+    try {
+      for (const file of files) {
+        uploads.push(await uploadToCloudinary(file));
+      }
+
+      const coverIndex = Number(req.body.coverIndex);
+      const images = uploads.map((upload, index) =>
+        toMediaPayload({
+          propertyId: created.property_id,
+          isCover: Number.isInteger(coverIndex) && coverIndex === index,
+          file: files[index],
+          upload,
+        })
+      );
+
+      await ImagesModel.insertMultipleImages(created.property_id, images);
+    } catch (err) {
+      // best-effort: log and continue
+      console.error("error uploading property images", err?.message || err);
+    }
+  }
+
   return ok(res, created, "Property created successfully", undefined, 201);
 });
 
@@ -328,6 +360,23 @@ export const updateCoverImageUrl = wrap(async (req, res) => {
   }
 
   return ok(res, updated, "Property cover image updated successfully");
+});
+
+// Ensure listing endpoints tolerate missing/broken image references by gracefully returning empty arrays
+export const safeGetPropertyImages = wrap(async (req, res) => {
+  try {
+    const images = await ImagesModel.getPropertyImage(req.params.propertyId);
+    return ok(res, images || [], "Property images retrieved successfully", {
+      total: images?.length || 0,
+      propertyId: req.params.propertyId,
+    });
+  } catch (err) {
+    // On any error, return empty list instead of 500
+    return ok(res, [], "Property images retrieved successfully", {
+      total: 0,
+      propertyId: req.params.propertyId,
+    });
+  }
 });
 
 export const countProperties = wrap(async (req, res) => {

@@ -20,7 +20,13 @@ import {
   updateMyPassword,
   getActivityLogs,
   getApiStats,
+  approveListing,
+  rejectListing,
+  approveSellerKyc,
+  rejectSellerKyc,
 } from "../controllers/admin.controller.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import { propertyIdParamSchema, sellerIdParamSchema, rejectListingBody, rejectKycBody } from "../validators/admin.validator.js";
 
 const router = Router();
 
@@ -188,5 +194,39 @@ router.patch(
  * @access  Admin
  */
 router.get("/activity-logs", requireRole("admin"), getActivityLogs);
+
+/**
+ * Listing moderation
+ */
+router.post(
+  "/listings/:propertyId/approve",
+  requireRole("admin"),
+  validate({ params: propertyIdParamSchema }),
+  approveListing
+);
+
+router.post(
+  "/listings/:propertyId/reject",
+  requireRole("admin"),
+  validate({ params: propertyIdParamSchema, body: rejectListingBody }),
+  rejectListing
+);
+
+/**
+ * Seller KYC review
+ */
+router.post(
+  "/sellers/:sellerId/kyc/approve",
+  requireRole("admin"),
+  validate({ params: sellerIdParamSchema }),
+  approveSellerKyc
+);
+
+router.post(
+  "/sellers/:sellerId/kyc/reject",
+  requireRole("admin"),
+  validate({ params: sellerIdParamSchema, body: rejectKycBody }),
+  rejectSellerKyc
+);
 
 export default router;

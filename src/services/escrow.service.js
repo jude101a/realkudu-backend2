@@ -1,74 +1,167 @@
-import { create, updateStatus } from "../repositories/escrow.repository";
+import EscrowRepository from "../repositories/escrow.repository.js";
+import pool from "../config/db.js";
+import WalletService from "./wallet.service.js";
 
-  import  {transferService } from "./transfer.service";
+export const ESCROW_STATUS = Object.freeze({
+  PENDING: "PENDING",
+  HELD: "HELD",
+  RELEASED: "RELEASED",
+  DISPUTED: "DISPUTED",
+  CANCELLED: "CANCELLED",
+  REFUNDED: "REFUNDED",
+});
 
-class EscrowService {
+const normalizeStatus = (status) => String(status || "").toUpperCase();
 
-    async createFromTransaction(transaction) {
+const getColumn = (source = {}, camelKey, columnKey = camelKey) =>
+  source[columnKey] ?? source[camelKey] ?? null;
 
-        return create({
+const normalizeTransactionPayload = (transaction = {}) => ({
+  transactionId: getColumn(transaction, "transactionId", "id"),
+  propertyId: getColumn(transaction, "propertyId", "property_id"),
+  buyerId: getColumn(transaction, "buyerId", "buyer_id"),
+  sellerId: getColumn(transaction, "sellerId", "seller_id"),
+  agentId: getColumn(transaction, "agentId", "agent_id"),
+});
 
-            property: transaction.property,
+const assertTransition = (from, to) => {
+  const current = normalizeStatus(from);
+  const next = normalizeStatus(to);
 
-            transaction: transaction._id,
+  const allowed = {
+    [ESCROW_STATUS.PENDING]: new Set([ESCROW_STATUS.HELD, ESCROW_STATUS.CANCELLED]),
+    [ESCROW_STATUS.HELD]: new Set([
+      ESCROW_STATUS.RELEASED,
+      ESCROW_STATUS.DISPUTED,
+      ESCROW_STATUS.REFUNDED,
+    ]),
+    [ESCROW_STATUS.DISPUTED]: new Set([ESCROW_STATUS.RELEASED, ESCROW_STATUS.REFUNDED]),
+  };
 
-            buyer: transaction.buyer,
+  if (current === next) return;
 
-            seller: transaction.seller,
+  if (!allowed[current]?.has(next)) {
+    throw new Error(`Invalid escrow status transition: ${current || "UNKNOWN"} -> ${next}`);
+  }
+};
 
-            agent: transaction.agent,
+export class EscrowService {
+  constructor({
+    escrowRepository = EscrowRepository,
+    transfers = null,
+    walletService = WalletService,
+    db = pool,
+  } = {}) {
+    this.escrowRepository = escrowRepository;
+    this.transferService = transfers;
+    this.walletService = walletService;
+    this.db = db;
+  }
 
-            amount: transaction.amount
-
-        });
-
+  async getTransferService() {
+    if (!this.transferService) {
+      const module = await import("./transfer.service.js");
+      this.transferService = module.default;
     }
 
-    async markInspectionCompleted(id) {
+    return this.transferService;
+  }
 
-        return updateStatus(
+  async createFromTransaction(transaction) {
+    const payload = normalizeTransactionPayload(transaction);
 
-            id,
-
-            "INSPECTION_COMPLETED"
-
-        );
-
+    if (!payload.transactionId) {
+      throw new Error("transactionId is required to create escrow");
     }
 
-    async approveBuyer(id) {
+    return this.escrowRepository.create({
+      ...payload,
+      status: ESCROW_STATUS.PENDING,
+    });
+  }
 
-        return updateStatus(
+  async findByTransaction(transactionId) {
+    return this.escrowRepository.findByTransaction(transactionId);
+  }
 
-            id,
+  async findByProperty(propertyId) {
+    return this.escrowRepository.findByProperty(propertyId);
+  }
 
-            "BUYER_APPROVED"
+  async updateStatus(id, nextStatus) {
+    const escrow = await this.escrowRepository.findById(id);
 
-        );
-
+    if (!escrow) {
+      throw new Error("Escrow not found");
     }
 
+    const normalizedNextStatus = normalizeStatus(nextStatus);
+    assertTransition(escrow.status, normalizedNextStatus);
 
-async releaseEscrow(
-    escrow,
-    recipientCode
-){
+    if (normalizedNextStatus === ESCROW_STATUS.RELEASED) {
+      const client = await this.db.connect();
 
-    const transfer =
-        await transferService
-            .prepareTransfer({
+      try {
+        await client.query("BEGIN");
+        await this.walletService.recordEscrowRelease(escrow, client);
 
-                escrow,
-
-                recipientCode
-
-            });
-
-    await transferService
-        .sendTransfer(
-            transfer
+        const { rows } = await client.query(
+          `
+            UPDATE escrows
+            SET status = 'RELEASED',
+                released_at = NOW()
+            WHERE id = $1
+            RETURNING *
+          `,
+          [id]
         );
 
+        await client.query("COMMIT");
+        return rows[0] ?? null;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
+    return this.escrowRepository.updateStatus(id, normalizedNextStatus);
+  }
+
+  async markHeld(id) {
+    return this.updateStatus(id, ESCROW_STATUS.HELD);
+  }
+
+  async markInspectionCompleted(id) {
+    return this.markHeld(id);
+  }
+
+  async approveBuyer(id) {
+    return this.updateStatus(id, ESCROW_STATUS.RELEASED);
+  }
+
+  async releaseEscrow(escrowOrId, recipientCode) {
+    const escrow =
+      typeof escrowOrId === "string"
+        ? await this.escrowRepository.findById(escrowOrId)
+        : escrowOrId;
+
+    if (!escrow) {
+      throw new Error("Escrow not found");
+    }
+
+    if (recipientCode && escrow.transaction?.amount) {
+      const transfers = await this.getTransferService();
+      const transfer = await transfers.prepareTransfer({
+        escrow,
+        recipientCode,
+      });
+      await transfers.sendTransfer(transfer);
+    }
+
+    return this.updateStatus(escrow.id, ESCROW_STATUS.RELEASED);
+  }
 }
 
-}
+export default new EscrowService();

@@ -18,6 +18,9 @@ import {
   getTransactionById,
   getUserStatistics,
 } from "../models/admin.model.js";
+import PropertyModel from "../models/property.model.js";
+import SellerModel from "../models/seller.model.js";
+import { notificationQueue } from "../queues/notification.queue.js";
 
 const SALT_ROUNDS = 12;
 const ADMIN_ROLES = ["owner", "admin", "regional_manager", "customer_care"];
@@ -287,6 +290,147 @@ export const getApiStats = async (req, res) => {
   } catch (error) {
     console.error("Get API stats error:", error);
     return sendError(res, 500, "Failed to retrieve API stats");
+  }
+};
+
+export const approveListing = async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    if (!propertyId) return sendError(res, 400, "propertyId is required");
+
+    const updated = await PropertyModel.update(propertyId, { status: "approved" });
+    if (!updated) return sendError(res, 404, "Property not found");
+
+    await recordActivity(req, {
+      action: "APPROVE LISTING",
+      statusCode: 200,
+      targetType: "property",
+      targetId: String(propertyId),
+    });
+    // notify seller if possible
+    try {
+      const prop = await PropertyModel.findById(propertyId);
+      const sellerId = prop?.seller_id || prop?.sellerId || null;
+      if (sellerId) {
+        await notificationQueue.add("listing:approved", {
+          to: sellerId,
+          title: "Your listing was approved",
+          message: `Your listing ${propertyId} has been approved by the admin.`,
+          data: { propertyId },
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to enqueue approval notification", err?.message || err);
+    }
+
+    return sendSuccess(res, 200, { message: "Listing approved", data: updated });
+  } catch (error) {
+    console.error("Approve listing error:", error);
+    return sendError(res, 500, "Failed to approve listing");
+  }
+};
+
+export const rejectListing = async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const reason = req.body?.reason || null;
+    if (!propertyId) return sendError(res, 400, "propertyId is required");
+
+    const updated = await PropertyModel.update(propertyId, { status: "rejected" });
+    if (!updated) return sendError(res, 404, "Property not found");
+
+    await recordActivity(req, {
+      action: "REJECT LISTING",
+      statusCode: 200,
+      targetType: "property",
+      targetId: String(propertyId),
+      metadata: { reason },
+    });
+    try {
+      const prop = await PropertyModel.findById(propertyId);
+      const sellerId = prop?.seller_id || prop?.sellerId || null;
+      if (sellerId) {
+        await notificationQueue.add("listing:rejected", {
+          to: sellerId,
+          title: "Your listing was rejected",
+          message: `Your listing ${propertyId} was rejected. Reason: ${reason || "Not specified"}`,
+          data: { propertyId, reason },
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to enqueue rejection notification", err?.message || err);
+    }
+
+    return sendSuccess(res, 200, { message: "Listing rejected", data: updated });
+  } catch (error) {
+    console.error("Reject listing error:", error);
+    return sendError(res, 500, "Failed to reject listing");
+  }
+};
+
+export const approveSellerKyc = async (req, res) => {
+  try {
+    const { sellerId } = req.params;
+    if (!sellerId) return sendError(res, 400, "sellerId is required");
+
+    const result = await SellerModel.setVerification(sellerId, true);
+    if (!result.rowCount) return sendError(res, 404, "Seller not found");
+
+    await recordActivity(req, {
+      action: "APPROVE_SELLER_KYC",
+      statusCode: 200,
+      targetType: "seller",
+      targetId: String(sellerId),
+    });
+    try {
+      await notificationQueue.add("seller:kyc:approved", {
+        to: sellerId,
+        title: "KYC approved",
+        message: "Your seller KYC has been approved by admin.",
+        data: { sellerId },
+      });
+    } catch (err) {
+      console.warn("Failed to enqueue KYC approved notification", err?.message || err);
+    }
+
+    return sendSuccess(res, 200, { message: "Seller KYC approved", data: result.rows[0] });
+  } catch (error) {
+    console.error("Approve seller KYC error:", error);
+    return sendError(res, 500, "Failed to approve seller KYC");
+  }
+};
+
+export const rejectSellerKyc = async (req, res) => {
+  try {
+    const { sellerId } = req.params;
+    const reason = req.body?.reason || null;
+    if (!sellerId) return sendError(res, 400, "sellerId is required");
+
+    const result = await SellerModel.setVerification(sellerId, false);
+    if (!result.rowCount) return sendError(res, 404, "Seller not found");
+
+    await recordActivity(req, {
+      action: "REJECT_SELLER_KYC",
+      statusCode: 200,
+      targetType: "seller",
+      targetId: String(sellerId),
+      metadata: { reason },
+    });
+    try {
+      await notificationQueue.add("seller:kyc:rejected", {
+        to: sellerId,
+        title: "KYC rejected",
+        message: `Your seller KYC was rejected. Reason: ${reason || "Not specified"}`,
+        data: { sellerId, reason },
+      });
+    } catch (err) {
+      console.warn("Failed to enqueue KYC rejected notification", err?.message || err);
+    }
+
+    return sendSuccess(res, 200, { message: "Seller KYC rejected", data: result.rows[0] });
+  } catch (error) {
+    console.error("Reject seller KYC error:", error);
+    return sendError(res, 500, "Failed to reject seller KYC");
   }
 };
 
