@@ -10,6 +10,7 @@ import {
   updateUser as updateUserModel,
   updateUserById,
   updateUserIsLawyer,
+  verifyUserAccount
 } from "../models/user.models.js";
   import { notificationQueue } from "../queues/notification.queue.js";
 
@@ -188,6 +189,38 @@ try {
       token,
       user: sanitizeUser(user),
     });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const verifyUser = async (req, res, next) => {
+  try {
+    const { userId, nin, bvn, utilityBillType, utilityBillUrl, faceCaptureUrl } = req.body;
+    if (!isUuid(userId)) {
+      return sendError(res, 400, "userId must be a valid UUID");
+    }
+
+    const user = await findUserById(userId);
+    if (!user) {
+      return sendError(res, 404, "User not found");
+    }
+
+   try {
+    await verifyUserAccount(userId, {
+      nin,
+      bvn,
+      utilityBillType,
+      utilityBillUrl,
+      faceCaptureUrl
+    }
+  
+  );} catch (error) {
+    return sendError(res, 400, "Verification failed: " + error.message);
+  }
+    
+
+    return sendSuccess(res, 200, { user: sanitizeUser(user) });
   } catch (err) {
     return next(err);
   }

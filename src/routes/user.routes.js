@@ -9,6 +9,7 @@ import {
   getUserFullname,
   getUserBasicInfoById,
   verifyEmail,
+  verifyUser,
 } from "../controllers/user.controller.js";
 
 import { protect } from "../middlewares/auth.middleware.js";
@@ -36,6 +37,7 @@ router.get("/verify-email", verifyEmail);
 /* -------------------------------------------------------------------------- */
 router.put("/:id", protect, updateProfile);
 router.post("/:id/change-password", protect, changePassword);
+router.post("/:id/verify-user", protect, requireRole("user"), verifyUser );
 
 /* -------------------------------------------------------------------------- */
 /*                               ADMIN / ROLE                                 */

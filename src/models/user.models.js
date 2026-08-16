@@ -178,6 +178,27 @@ export const updateUser = async (id, { firstName, lastName, phone }) => {
   return rows[0] || null;
 };
 
+
+export const verifyUserAccount = async (id, { nin, bvn, utilityBillType, utilityBillUrl, faceCaptureUrl }) => {
+  const { rows } = await pool.query(
+    `
+    UPDATE ${TABLE}
+    SET nin=$1,
+        bvn=$2,
+        utility_bill_type=$3,
+        utility_bill_url=$4,
+        face_capture_url=$5,
+        is_verified=TRUE,
+        updated_at=NOW()
+    WHERE id=$6
+    RETURNING *
+    `,
+    [nin, bvn, utilityBillType, utilityBillUrl, faceCaptureUrl, id]
+  );
+
+  return rows[0] || null;
+};
+
 export const updatePassword = async (id, passwordHash) => {
   await pool.query(
     `
