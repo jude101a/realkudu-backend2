@@ -1,3 +1,4 @@
+import { logger } from "@sentry/node";
 import SellerModel, {
   SellerStatus,
   SellerType,
@@ -79,103 +80,216 @@ const sanitizeSeller = (row) => ({
   deletedAt: row.deleted_at,
 });
 
-const assertUuid = (res, value, field) => {
-  if (!isUuid(value)) {
-    fail(res, 400, `${field} must be a valid UUID`, "VALIDATION_ERROR");
-    return false;
-  }
-  return true;
+/**
+ * Seller registration.
+ *
+ * Scalability approach:
+ * Each seller type declares its own required fields, payload shape, and
+ * DB call in SELLER_FIELD_CONFIG. Adding a new seller type (e.g. NGO,
+ * SoleProprietor) means adding one config entry — no changes needed to
+ * validation flow, response handling, or the route handlers below.
+ */
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const normalizeEmailOrNull = (email) =>
+  email === undefined || email === null || email === "" ? null : normalizeEmail(email);
+
+const normalizePhoneOrNull = (phone) =>
+  phone === undefined || phone === null || phone === "" ? null : normalizePhone(phone);
+
+/**
+ * Pure UUID check (no res side-effects), so it can be reused inside
+ * createSeller without coupling business logic to the HTTP layer.
+ *
+ * NOTE: if you already have a pure validator elsewhere (e.g. inside
+ * whatever module defines `assertUuid`), swap this out for that and
+ * delete this local copy.
+ */
+const isValidUuid = (value) => typeof value === "string" && UUID_RE.test(value);
+
+// ---------------------------------------------------------------------------
+// Per-seller-type configuration
+// ---------------------------------------------------------------------------
+
+const SELLER_FIELD_CONFIG = {
+  [SellerType.INDIVIDUAL]: {
+    // Fields beyond userId/businessName that must be present for this type
+    required: [
+      { field: "businessEmail", label: "businessEmail" },
+      { field: "businessPhone", label: "businessPhone" },
+      { field: "sellerFaceCaptureUrl", label: "sellerFaceCaptureUrl" },
+    ],
+    buildPayload: (body) => ({
+      userId: body.userId,
+      businessName: String(body.businessName).trim(),
+      businessSpecification: body.businessSpecification ?? null,
+      businessEmail: normalizeEmailOrNull(body.businessEmail),
+      businessPhone: normalizePhoneOrNull(body.businessPhone),
+      sellerFaceCaptureUrl: body.sellerFaceCaptureUrl ?? null,
+      sellerType: SellerType.INDIVIDUAL,
+    }),
+    register: (payload) =>
+      SellerModel.registerIndividualSellerWithUserValidation(payload),
+    successMessage: "Individual seller profile created successfully",
+  },
+
+  [SellerType.COMPANY]: {
+    required: [{ field: "cacNumber", label: "cacNumber" },
+      { field: "primaryShareholderName", label: "primaryShareholderName" },
+      { field: "primaryShareholderEmail", label: "primaryShareholderEmail" },
+      { field: "primaryShareholderPhone", label: "primaryShareholderPhone" },
+      { field: "primaryShareholderIdDocumentUrl", label: "primaryShareholderIdDocumentUrl" },
+      { field: "primaryShareholderNin", label: "primaryShareholderNin" },
+      {field: "businessEmail", label: "businessEmail" },
+      {field: "businessPhone", label: "businessPhone" },
+      {field: "businessAddress", label: "businessAddress" },
+      {field: "memorandumDocumentUrl", label: "memorandumDocumentUrl" },
+      {field: "tinNumber", label: "tinNumber" },
+
+
+    ],
+    buildPayload: (body) => ({
+      userId: body.userId,
+      businessName: String(body.businessName).trim(),
+      businessAddress: body.businessAddress ?? null,
+      businessEmail: normalizeEmailOrNull(body.businessEmail),
+      businessPhone: normalizePhoneOrNull(body.businessPhone),
+      cacNumber: body.cacNumber ?? null,
+      tinNumber: body.tinNumber ?? null,
+      cacDocumentUrl: body.cacDocumentUrl ?? null,
+      memorandumDocumentUrl: body.memorandumDocumentUrl ?? null,
+      utilityBillDocumentUrl: body.utilityBillDocumentUrl ?? null,
+      businessProfileImageUrl: body.businessProfileImageUrl ?? null,
+      additionalShareholders: body.additionalShareholders ?? null,
+      businessLga: body.businessLga ?? null,
+      businessState: body.businessState ?? null,
+      businessWebsite: body.businessWebsite ?? null,
+      businessDescription: body.businessDescription ?? null,
+      businessSpecification: body.businessSpecification ?? null,
+      primaryShareholderName: body.primaryShareholderName ?? null,
+      primaryShareholderEmail: normalizeEmailOrNull(body.primaryShareholderEmail),
+      primaryShareholderPhone: normalizePhoneOrNull(body.primaryShareholderPhone),
+      primaryShareholderIdDocumentUrl:
+        body.primaryShareholderIdDocumentUrl ?? null,
+      primaryShareholderNin: body.primaryShareholderNin ?? null,
+      sellerType: SellerType.COMPANY,
+    }),
+    register: (payload) =>
+      SellerModel.registerCompanySellerWithUserValidation(payload),
+    successMessage: "Company seller profile created successfully",
+  },
 };
 
-const registerSeller = async (req, res, type) => {
-  const {
-    userId,
-    businessName,
-    businessAddress,
-    businessEmail,
-    businessPhone,
-    cacNumber,
-    tinNumber,
-    cacDocumentUrl,
-    businessSpecification,
-    businessProfileImageUrl,
-  } = req.body || {};
+// ---------------------------------------------------------------------------
+// Core logic (no res coupling — easy to unit test, easy to reuse)
+// ---------------------------------------------------------------------------
 
-  if (!assertUuid(res, userId, "userId")) return;
+/**
+ * Validates and creates a seller of the given type.
+ * Returns a plain result object instead of writing to `res`, so callers
+ * decide how/whether to respond (this is what fixes the "notification
+ * fires even on failed creation" bug in the original company handler).
+ */
+async function createSeller(req, type) {
+  const body = req.body || {};
+  const { userId, businessName } = body;
+
+  const config = SELLER_FIELD_CONFIG[type];
+  if (!config) {
+    // Internal guard only — should never be hit via the exported handlers.
+    return {
+      ok: false,
+      status: 500,
+      message: `Unsupported seller type: ${type}`,
+      code: "INTERNAL_ERROR",
+    };
+  }
+
+  if (!isValidUuid(userId)) {
+    return {
+      ok: false,
+      status: 400,
+      message: "userId must be a valid UUID",
+      code: "VALIDATION_ERROR",
+    };
+  }
 
   if (!businessName || String(businessName).trim().length < 2) {
-    return fail(
-      res,
-      400,
-      "businessName must be at least 2 characters",
-      "VALIDATION_ERROR"
-    );
+    return {
+      ok: false,
+      status: 400,
+      message: "businessName must be at least 2 characters",
+      code: "VALIDATION_ERROR",
+    };
   }
 
-  if (type === SellerType.COMPANY && !cacNumber) {
-    return fail(res, 400, "cacNumber is required for company sellers", "VALIDATION_ERROR");
+  for (const { field, label } of config.required) {
+    if (!body[field]) {
+      return {
+        ok: false,
+        status: 400,
+        message: `${label} is required for ${type} sellers`,
+        code: "VALIDATION_ERROR",
+      };
+    }
   }
 
-  const payload = {
-    userId,
-    businessName: String(businessName).trim(),
-    businessAddress: businessAddress ?? null,
-    businessEmail:
-      businessEmail === undefined || businessEmail === null || businessEmail === ""
-        ? null
-        : normalizeEmail(businessEmail),
-    businessPhone: normalizePhone(businessPhone),
-    cacNumber: type === SellerType.COMPANY ? cacNumber ?? null : null,
-    tinNumber: tinNumber ?? null,
-    cacDocumentUrl: cacDocumentUrl ?? null,
-    businessSpecification: businessSpecification ?? null,
-    businessProfileImageUrl: businessProfileImageUrl ?? null,
+  const payload = config.buildPayload(body);
+  const created = await config.register(payload);
+
+  return {
+    ok: true,
+    status: 201,
+    message: config.successMessage,
+    data: sanitizeSeller(created.rows[0]),
   };
+}
 
-  const created =
-    type === SellerType.COMPANY
-      ? await SellerModel.registerCompanySellerWithUserValidation(payload)
-      : await SellerModel.registerIndividualSellerWithUserValidation(payload);
+// ---------------------------------------------------------------------------
+// Route handlers (thin — just translate result -> HTTP response)
+// ---------------------------------------------------------------------------
 
-  return ok(
-    res,
-    {
-      message:
-        type === SellerType.COMPANY
-          ? "Company seller profile created successfully"
-          : "Individual seller profile created successfully",
-      data: sanitizeSeller(created.rows[0]),
-    },
-    201
-  );
-};
+export const registerIndividualSeller = withErrorHandling(async (req, res) => {
+  const result = await createSeller(req, SellerType.INDIVIDUAL);
 
-export const registerIndividualSeller = withErrorHandling(async (req, res) =>
-  registerSeller(req, res, SellerType.INDIVIDUAL)
-);
+  if (!result.ok) {
+    return fail(res, result.status, result.message, result.code);
+  }
+
+  return ok(res, { message: result.message, data: result.data }, result.status);
+});
 
 export const registerCompanySeller = withErrorHandling(async (req, res) => {
-  // ✅ Ensure seller is created first
-  const result = await registerSeller(req, res, SellerType.COMPANY);
+  const result = await createSeller(req, SellerType.COMPANY);
 
-  try {
-    await sendNotification({
-    user: {
-      id: req.userId,
-      email: req.sellerEmail,
-    },
-    title: "Registration Successful",
-    message: "Welcome to onboard! Your company seller account has been created successfully.",
-    channels: ["PUSH", "EMAIL", "IN_APP"],
-    data: {
-    
-    },
-  });
-  
-  } catch (error) {
-    
+  if (!result.ok) {
+    return fail(res, result.status, result.message, result.code);
   }
 
+  ok(res, { message: result.message, data: result.data }, result.status);
+
+  // Fire-and-forget: notification failure should never affect the
+  // already-sent success response above.
+  try {
+    await sendNotification({
+      user: {
+        id: req.userId,
+        email: req.sellerEmail,
+      },
+      title: "Registration Successful",
+      message:
+        "Welcome onboard! Your company seller account has been created successfully.",
+      channels: ["PUSH", "EMAIL", "IN_APP"],
+      data: {},
+    });
+  } catch (error) {
+    logger.error("Failed to send seller registration notification", error);
+    // TODO: replace with your logger, e.g. logger.error("seller notification failed", error)
+    console.error("Failed to send seller registration notification:", error);
+  }
 });
 
 export const loginSeller = withErrorHandling(async (req, res) => {
