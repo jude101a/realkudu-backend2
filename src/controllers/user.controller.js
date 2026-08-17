@@ -1,5 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import axios from "axios";
+import crypto from "crypto";
 import {
   createUser,
   findUserByEmail,
@@ -26,6 +28,8 @@ const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 const isUuid = (value) => UUID_RE.test(String(value || ""));
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const normalizeProvider = (provider) => String(provider || "").trim().toLowerCase();
 
 const sendSuccess = (res, status, payload) =>
   res.status(status).json({ success: true, ...payload });
@@ -189,6 +193,201 @@ try {
       token,
       user: sanitizeUser(user),
     });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const verifyGoogleToken = async (idToken) => {
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+
+  if (!googleClientId) {
+    throw new Error("Google social login is not configured: GOOGLE_CLIENT_ID is missing.");
+  }
+
+  const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(
+    idToken
+  )}`;
+  const { data } = await axios.get(url, { timeout: 10000 });
+
+  if (!data?.email || !data?.sub) {
+    throw new Error("Google token did not return a valid user identity");
+  }
+
+  if (data.aud && data.aud !== googleClientId) {
+    throw new Error("Google token audience mismatch");
+  }
+
+  if (data.iss && !["accounts.google.com", "https://accounts.google.com"].includes(data.iss)) {
+    throw new Error("Google token issuer mismatch");
+  }
+
+  return {
+    email: data.email,
+    firstName: data.given_name || data.name || "",
+    lastName: data.family_name || "",
+    providerId: data.sub,
+    profileImageUrl: data.picture || null,
+  };
+};
+
+const verifyFacebookToken = async (accessToken) => {
+  const appId = process.env.FACEBOOK_APP_ID;
+  const appSecret = process.env.FACEBOOK_APP_SECRET;
+
+  if (!appId || !appSecret) {
+    throw new Error(
+      "Facebook social login is not configured: FACEBOOK_APP_ID and FACEBOOK_APP_SECRET are required."
+    );
+  }
+
+  const accessTokenWithApp = `${appId}|${appSecret}`;
+  const debugTokenUrl = `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(
+    accessToken
+  )}&access_token=${encodeURIComponent(accessTokenWithApp)}`;
+  const { data: debugData } = await axios.get(debugTokenUrl, { timeout: 10000 });
+
+  if (!debugData?.data?.is_valid) {
+    throw new Error("Facebook token is invalid or expired");
+  }
+
+  if (debugData.data.app_id && debugData.data.app_id !== appId) {
+    throw new Error("Facebook token does not belong to this application");
+  }
+
+  const appsecretProof = crypto
+    .createHmac("sha256", appSecret)
+    .update(accessToken)
+    .digest("hex");
+
+  const profileUrl = `https://graph.facebook.com/me?fields=id,email,first_name,last_name,picture&access_token=${encodeURIComponent(
+    accessToken
+  )}&appsecret_proof=${encodeURIComponent(appsecretProof)}`;
+  const { data } = await axios.get(profileUrl, { timeout: 10000 });
+
+  return {
+    email: data.email,
+    firstName: data.first_name || data.name || "",
+    lastName: data.last_name || "",
+    providerId: data.id,
+    profileImageUrl: data.picture?.data?.url || null,
+  };
+};
+
+const verifyTwitterToken = async (bearerToken) => {
+  const hasTwitterConfig = Boolean(
+    process.env.TWITTER_CLIENT_ID || process.env.TWITTER_CLIENT_SECRET || process.env.TWITTER_BEARER_TOKEN
+  );
+
+  if (!hasTwitterConfig) {
+    throw new Error(
+      "X/Twitter social login is not configured: set TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET, or TWITTER_BEARER_TOKEN."
+    );
+  }
+
+  const url = `https://api.twitter.com/2/users/me?user.fields=profile_image_url,name,username`;
+  const { data } = await axios.get(url, {
+    headers: {
+      Authorization: `Bearer ${bearerToken}`,
+    },
+    timeout: 10000,
+  });
+
+  if (!data?.data?.id) {
+    throw new Error("X/Twitter token is invalid or missing user identity");
+  }
+
+  return {
+    email: data.data?.email || null,
+    firstName: data.data?.name || "",
+    lastName: "",
+    providerId: data.data?.id,
+    profileImageUrl: data.data?.profile_image_url || null,
+  };
+};
+
+const verifySocialToken = async (provider, token) => {
+  if (!provider || !token) throw new Error("provider and token are required");
+
+  const normalizedProvider = normalizeProvider(provider);
+
+  if (normalizedProvider === "google") return verifyGoogleToken(token);
+  if (normalizedProvider === "facebook" || normalizedProvider === "fb") return verifyFacebookToken(token);
+  if (normalizedProvider === "twitter" || normalizedProvider === "x") return verifyTwitterToken(token);
+
+  throw new Error("Unsupported provider");
+};
+
+export const socialLogin = async (req, res, next) => {
+  try {
+    const { provider, token, rememberMe = false, email: suppliedEmail } = req.body;
+    if (!provider || !token) return sendError(res, 400, "provider and token are required");
+
+    let profile;
+    try {
+      profile = await verifySocialToken(provider, token);
+    } catch (err) {
+      return sendError(res, 400, `Invalid ${provider} token: ${err.message}`);
+    }
+
+    const email = (profile.email || suppliedEmail || "").toLowerCase();
+    if (!email) {
+      return sendError(
+        res,
+        400,
+        "Could not retrieve email from provider. Please ensure the provider returned an email or send it from the client."
+      );
+    }
+
+    let user = await findUserByEmail(email);
+    if (!user) {
+      const randomPassword = crypto.randomBytes(24).toString("hex");
+      const passwordHash = await bcrypt.hash(randomPassword, SALT_ROUNDS);
+
+      const userPayload = {
+        email,
+        password: passwordHash,
+        firebaseUid: null,
+        firstName: profile.firstName || "",
+        lastName: profile.lastName || "",
+        phone: null,
+        transactionPin: null,
+        address: null,
+        occupation: null,
+        positionAtWork: null,
+        placeOfWork: null,
+        localGovernmentArea: null,
+        state: null,
+        country: "Nigeria",
+        maritalStatus: "single",
+        numberOfChildren: 0,
+        hobbies: null,
+        role: "user",
+      };
+
+      user = await createUser(userPayload);
+      // mark verified
+      await updateUserById(user.id, { is_verified: true });
+    }
+
+    const expiresIn = rememberMe ? "30d" : JWT_EXPIRES_IN;
+    const jwtToken = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn }
+    );
+
+    try {
+      await sendNotification({
+        user: { id: user.id, email: user.email },
+        title: "Login Alert",
+        message: `Logged in via ${provider}`,
+        channels: ["PUSH"],
+        data: {},
+      });
+    } catch (e) {}
+
+    return sendSuccess(res, 200, { token: jwtToken, user: sanitizeUser(user) });
   } catch (err) {
     return next(err);
   }
