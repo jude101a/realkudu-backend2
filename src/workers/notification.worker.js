@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { redisConnectionOptions } from "../config/redis.js";
+import { getRedisConnectionConfig } from "../config/redis.js";
 import { sendPush } from "../services/push.notification.service.js";
 import { sendEmail } from "../services/email.service.js";
 import { saveNotification } from "../services/notifications.service.js";
@@ -33,7 +33,6 @@ const processJob = async (job) => {
 					tokens.map((token) => sendPush({ token, title, body, data }))
 				);
 
-				// Persist as in-app notification when userId is provided
 				if (userId) {
 					try {
 						await saveNotification({ userId, title, body, data });
@@ -76,26 +75,32 @@ const processJob = async (job) => {
 	}
 };
 
-const worker = new Worker(
-	"notifications",
-	async (job) => processJob(job),
-	{
-		connection: {
-			url: process.env.REDIS_URL,
-			...redisConnectionOptions,
-		},
-		concurrency: 5,
-	}
-);
+const connection = getRedisConnectionConfig();
 
-worker.on("completed", (job) => {
-	console.log(`[notification_worker] job completed ${job.id}`);
-});
+let worker = null;
 
-worker.on("failed", (job, err) => {
-	console.error(`[notification_worker] job failed ${job?.id}`, err?.message || err);
-});
+if (!connection) {
+	console.warn("⚠️ Notification worker disabled because Redis is unavailable.");
+} else {
+	worker = new Worker(
+		"notifications",
+		async (job) => processJob(job),
+		{
+			connection,
+			concurrency: 5,
+		}
+	);
 
-console.log("✅ Notification worker initialized");
+	worker.on("completed", (job) => {
+		console.log(`[notification_worker] job completed ${job.id}`);
+	});
+
+	worker.on("failed", (job, err) => {
+		console.error(`[notification_worker] job failed ${job?.id}`, err?.message || err);
+	});
+
+	console.log("✅ Notification worker initialized");
+	globalThis.__notificationWorker = worker;
+}
 
 export default worker;

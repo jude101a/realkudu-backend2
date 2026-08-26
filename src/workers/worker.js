@@ -10,7 +10,11 @@ async function startWorker() {
   try {
     const connection = redis;
 
-    // Test Redis connection with timeout
+    if (!connection) {
+      console.warn('⚠️ Notification worker skipped because Redis is disabled or unavailable.');
+      return;
+    }
+
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Redis connection timeout - no Redis server available'));
@@ -33,7 +37,6 @@ async function startWorker() {
       connection.on('ready', onReady);
       connection.on('error', onError);
 
-      // Try to connect if not already connected
       if (!connection.status || connection.status === 'close') {
         connection.connect().catch(onError);
       } else if (connection.status === 'ready') {
@@ -57,7 +60,6 @@ async function startWorker() {
             return await saveInAppNotification(payload);
 
           case "ALL":
-            // Run in parallel for efficiency
             return await Promise.allSettled([
               sendPush(payload.push),
               sendEmail(payload.email),
@@ -70,7 +72,7 @@ async function startWorker() {
       },
       {
         connection,
-        concurrency: 5, // Process up to 5 jobs simultaneously
+        concurrency: 5,
       }
     );
 
@@ -91,7 +93,6 @@ async function startWorker() {
     console.log('   3. Restart the worker');
     console.log('🔄 Worker will check for Redis every 30 seconds...');
 
-    // Retry every 30 seconds
     setTimeout(startWorker, 30000);
   }
 }

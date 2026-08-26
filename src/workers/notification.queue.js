@@ -1,6 +1,12 @@
 import { Queue } from 'bullmq';
-import redis from '../config/redis.js';
+import { getRedisConnectionConfig } from '../config/redis.js';
 
-export const notificationQueue = new Queue('notifications', {
-  connection: redis,
-});
+const connection = getRedisConnectionConfig();
+
+export const notificationQueue = connection
+  ? new Queue('notifications', { connection })
+  : null;
+
+if (!notificationQueue) {
+  console.warn('⚠️ Notification queue disabled because Redis is unavailable.');
+}

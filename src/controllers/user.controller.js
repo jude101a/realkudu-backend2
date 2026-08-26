@@ -367,7 +367,7 @@ export const socialLogin = async (req, res, next) => {
 
       user = await createUser(userPayload);
       // mark verified
-      await updateUserById(user.id, { is_verified: true });
+      // await updateUserById(user.id, { is_verified: true });
     }
 
     const expiresIn = rememberMe ? "30d" : JWT_EXPIRES_IN;

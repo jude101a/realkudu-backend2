@@ -15,6 +15,7 @@ import paymentRoutes from "./payment.routes.js";
 import transferRoutes from "./transfer.routes.js";
 import walletRoutes from "./wallet.routes.js";
 import tenantRoutes from "./tenant.routes.js";
+import transactionRoutes from "./transactions.routes.js";
 
 // MVP scope intentionally excludes land-property, apartment, and house-for-sale modules.
 
@@ -37,6 +38,7 @@ router.use("/payments", paymentRoutes);
 router.use("/transfers", transferRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/tenants", tenantRoutes);
+router.use("/transactions", transactionRoutes); // Assuming transferRoutes handles transactions as well
 
 router.use(
 

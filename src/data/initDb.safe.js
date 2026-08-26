@@ -995,6 +995,43 @@ async function createCoreTables(client) {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      reference VARCHAR(100) UNIQUE NOT NULL,
+      transaction_type VARCHAR(50) NOT NULL,
+      cover_image_url TEXT,
+      title VARCHAR(255) NOT NULL,
+      property_id UUID NOT NULL,
+      user_id UUID NOT NULL,
+      seller_id UUID,
+      amount DECIMAL(10, 2) NOT NULL,
+      platform_fee DECIMAL(10, 2) DEFAULT 0,
+      seller_payout_amount DECIMAL(10, 2),
+      currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+      status VARCHAR(20) NOT NULL DEFAULT 'in progress',
+      purchase_step VARCHAR(50) NOT NULL DEFAULT 'initiated',
+      escrow_status VARCHAR(20) DEFAULT 'not_applicable',
+      payment_channel VARCHAR(30),
+      gateway_reference VARCHAR(100),
+      gateway_response TEXT,
+      failure_reason TEXT,
+      retry_count INTEGER DEFAULT 0,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      completed_at TIMESTAMPTZ,
+      released_at TIMESTAMPTZ
+    );
+    CREATE INDEX idx_transactions_user_id ON transactions(user_id);
+    CREATE INDEX idx_transactions_property_id ON transactions(property_id);
+    CREATE INDEX idx_transactions_reference ON transactions(reference);
+    CREATE INDEX idx_transactions_status ON transactions(status);
+
+    
+  `);
+  
+
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS device_tokens (
@@ -1157,8 +1194,27 @@ async function createPropertyTables(client) {
   `);
 
   await ensurePropertyTableHotfix(client);
-}
 
+  await client.query(`
+    CREATE TABLE property_purchase_activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  property_id UUID NOT NULL,
+  user_id UUID NOT NULL,               -- the buyer
+  transaction_id UUID,                 -- nullable: not every activity has a payment yet
+  activity_type VARCHAR(40) NOT NULL,  -- 'inquired', 'survey_requested', 'surveyed',
+                                        -- 'booked', 'deposit_paid', 'balance_pending',
+                                        -- 'completed', 'cancelled'
+  notes TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_activities_property_id ON property_purchase_activities(property_id);
+CREATE INDEX idx_activities_user_id ON property_purchase_activities(user_id);
+CREATE INDEX idx_activities_transaction_id ON property_purchase_activities(transaction_id);
+
+`);
+  }
 async function ensurePropertyTableHotfix(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS property (
@@ -1655,6 +1711,8 @@ async function ensureIndexes(client) {
     `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_admin_id ON admin_activity_logs(admin_id)`,
     `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_created_at ON admin_activity_logs(created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_admin_activity_logs_action ON admin_activity_logs(action)`,
+
+    
   ];
 
   for (const statement of indexSql) {
