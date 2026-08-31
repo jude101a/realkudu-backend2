@@ -9,7 +9,7 @@ const router = express.Router();
 // router.post('/send_to_user', sendNotificationToUser);
 // router.post('/save_one_signal_token', saveOneSignalDeviceToken);
 
-router.get("/get/:id", getUserNotifications);
+router.get("/get/:userId", getUserNotifications);
 router.post('/inquiry', async (req, res) => {
   const { userId, propertyId, buyerId } = req.body;
   try {
