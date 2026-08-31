@@ -31,7 +31,7 @@ class TransactionController {
 
   async getStatus(req, res, next) {
     try {
-      const transfer = await TransferService.getTransferStatus(req.params.reference);
+      const transfer = await TransactionService.getTransactionStatus(req.params.reference);
 
       return res.json({
         success: true,
@@ -41,17 +41,29 @@ class TransactionController {
       next(error);
     }
   }
-
-  async listSellerTransfers(req, res, next) {
+  async getTransaction(req, res, next) {
     try {
-      const transfers = await TransferService.listSellerTransfers(req.params.sellerId, {
+      const transaction = await TransactionModel.getTransaction(req.params.id, req.user.id);
+
+      return res.json({
+        success: true,
+        data: transaction,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async listSellerTransactions(req, res, next) {
+    try {
+      const transactions = await TransactionModel.getTransactions(req.params.sellerId, {
         page: req.query.page,
         limit: req.query.limit,
       });
 
       return res.json({
         success: true,
-        data: transfers,
+        data: transactions,
       });
     } catch (error) {
       next(error);
@@ -59,4 +71,4 @@ class TransactionController {
   }
 }
 
-export default new TransferController();
+export default new TransactionController();

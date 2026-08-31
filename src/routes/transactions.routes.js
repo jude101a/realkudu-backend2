@@ -1,5 +1,5 @@
 import { Router } from "express";
-import TransferController from "../controllers/transfer.controller.js";
+import TransactionController from "../controllers/transactions.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
 import validate from "../middlewares/validate.js";
@@ -16,7 +16,7 @@ router.post(
   protect,
   requireRole("ADMIN", "SELLER", "USER", "AGENT"),
   validate(initiateTransactionSchema),
-  TransferController.initiate
+  TransactionController.initiate
 );
 
 router.get(
@@ -24,7 +24,7 @@ router.get(
   protect,
   requireRole("ADMIN", "SELLER"),
   validate(transactionStatusSchema),
-  TransferController.getStatus
+  TransactionController.getStatus
 );
 
 router.get(
@@ -33,8 +33,8 @@ router.get(
   requireRole("ADMIN", "SELLER"),
   validate(userTransactionsQuerySchema),
   (req, res, next) => {
-    if (typeof TransferController.listUserTransactions === 'function') {
-      return TransferController.listUserTransactions(req, res, next);
+    if (typeof TransactionController.getTransactions === 'function') {
+      return TransactionController.getTransactions(req, res, next);
     }
     return res.status(501).json({
       success: false,
