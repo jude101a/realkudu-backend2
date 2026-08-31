@@ -33,8 +33,8 @@ router.get(
   requireRole("ADMIN", "SELLER"),
   validate(userTransactionsQuerySchema),
   (req, res, next) => {
-    if (typeof TransactionController.getTransactions === 'function') {
-      return TransactionController.getTransactions(req, res, next);
+    if (typeof TransactionController.listSellerTransactions === 'function') {
+      return TransactionController.listSellerTransactions(req, res, next);
     }
     return res.status(501).json({
       success: false,
