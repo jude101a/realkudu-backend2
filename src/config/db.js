@@ -26,12 +26,23 @@ console.log("***** NEW DB FILE LOADED *****");
 
 // internalPool holds the real pg Pool instance; we export a proxy so other modules can keep
 // using the same `pool` import even if we recreate the underlying Pool on errors.
-let internalPool = new Pool({
-  connectionString: dbUrl,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
+// SSL should be enabled by default; only disable if PG explicitly requires it (not recommended).
+// Historically DB_SSL could disable SSL; to keep connections secure we'll default to SSL on.
+let defaultNoSsl = false;
+if (typeof process.env.DB_SSL !== 'undefined') {
+  console.warn('DB_SSL environment variable detected — SSL will remain enabled by default to ensure secure DB connections.');
+}
+
+let internalPool = (() => {
+  const opts = { connectionString: dbUrl };
+  if (defaultNoSsl) {
+    opts.ssl = false;
+    console.log('DB SSL disabled via DB_SSL=false');
+  } else {
+    opts.ssl = { rejectUnauthorized: String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "false").toLowerCase() !== 'false' ? true : false };
+  }
+  return new Pool(opts);
+})();
 
 function attachPoolHandlers(p) {
   p.on("error", (err) => {
@@ -52,7 +63,7 @@ const pool = new Proxy(
   }
 );
 
-export async function recreatePool({ noSsl = false } = {}) {
+export async function recreatePool({ noSsl = undefined } = {}) {
   try {
     if (internalPool) {
       try {
@@ -70,7 +81,9 @@ export async function recreatePool({ noSsl = false } = {}) {
     const caBase64 = process.env.PG_SSL_CA_BASE64;
     const caFile = process.env.PG_SSL_CA_FILE;
 
-    if (!noSsl) {
+    // Decide ssl mode: if noSsl explicitly true use false; else if undefined use defaultNoSsl; else use provided value
+    const finalNoSsl = typeof noSsl === 'boolean' ? noSsl : defaultNoSsl;
+    if (!finalNoSsl) {
       if (caBase64) {
         try {
           const ca = Buffer.from(caBase64, 'base64').toString();
@@ -96,7 +109,7 @@ export async function recreatePool({ noSsl = false } = {}) {
       opts.ssl = false;
     }
 
-    console.log(`Creating new DB pool (noSsl=${noSsl}) ssl=${typeof opts.ssl === 'object' ? JSON.stringify({rejectUnauthorized: opts.ssl.rejectUnauthorized}) : opts.ssl}`);
+    console.log(`Creating new DB pool (noSsl=${finalNoSsl}) ssl=${typeof opts.ssl === 'object' ? JSON.stringify({rejectUnauthorized: opts.ssl.rejectUnauthorized}) : opts.ssl}`);
     internalPool = new Pool(opts);
     attachPoolHandlers(internalPool);
   }
@@ -127,8 +140,8 @@ export async function ensureDatabaseConnectivity(retries = 3, delayMs = 500) {
           console.error("Failed to recreate DB pool (ssl), will try fallback", recreateErr?.message || recreateErr);
         }
       }
-      // On second failure try recreating pool with SSL disabled (some hosts don't accept SSL negotiation from client)
-      if (attempt === 2) {
+      // Only attempt non-SSL fallback if DB_SSL was explicitly set to false
+      if (attempt === 2 && defaultNoSsl) {
         try {
           await recreatePool({ noSsl: true });
           console.log("Recreated DB pool with SSL disabled (noSsl=true), retrying connection");
