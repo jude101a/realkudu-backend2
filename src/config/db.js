@@ -56,6 +56,29 @@ const pool = new Proxy(
   {},
   {
     get(_, prop) {
+      // Special-case `query` to add a single automatic retry+recreate on transient connection failures
+      if (prop === "query") {
+        return async function queryWithRetry(text, params) {
+          try {
+            return await internalPool.query(text, params);
+          } catch (err) {
+            const msg = String(err?.message || "").toLowerCase();
+            const isTransient = msg.includes("connection terminated unexpectedly") || msg.includes("ecoff") || err?.code === "ECONNRESET" || err?.code === "ECONNREFUSED";
+            if (isTransient) {
+              console.warn('[db] transient query error, attempting pool recreate then retry', { message: err?.message || err });
+              try {
+                await recreatePool();
+                return await internalPool.query(text, params);
+              } catch (retryErr) {
+                console.error('[db] retry after recreate failed', { error: retryErr?.message || retryErr });
+                throw retryErr;
+              }
+            }
+            throw err;
+          }
+        };
+      }
+
       const val = internalPool[prop];
       if (typeof val === "function") return val.bind(internalPool);
       return val;
