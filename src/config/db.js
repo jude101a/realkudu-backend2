@@ -1,5 +1,6 @@
 import pg from "pg";
 import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
@@ -51,22 +52,52 @@ const pool = new Proxy(
   }
 );
 
-export async function recreatePool() {
+export async function recreatePool({ noSsl = false } = {}) {
   try {
     if (internalPool) {
       try {
         await internalPool.end();
       } catch (e) {
-        console.warn("Error ending old internalPool", e);
+        console.warn("Error ending old internalPool", e?.message || e);
       }
     }
   } finally {
-    internalPool = new Pool({
+    const opts = {
       connectionString: dbUrl,
-      ssl: {
-        rejectUnauthorized: false,
-      },
-    });
+    };
+
+    // Prefer explicit CA if provided via env (base64 or file path)
+    const caBase64 = process.env.PG_SSL_CA_BASE64;
+    const caFile = process.env.PG_SSL_CA_FILE;
+
+    if (!noSsl) {
+      if (caBase64) {
+        try {
+          const ca = Buffer.from(caBase64, 'base64').toString();
+          opts.ssl = { rejectUnauthorized: true, ca };
+          console.log('Using PG SSL CA from PG_SSL_CA_BASE64');
+        } catch (e) {
+          console.warn('Failed to parse PG_SSL_CA_BASE64, falling back to rejectUnauthorized:false', e?.message || e);
+          opts.ssl = { rejectUnauthorized: false };
+        }
+      } else if (caFile && fs.existsSync(caFile)) {
+        try {
+          const ca = fs.readFileSync(caFile, 'utf8');
+          opts.ssl = { rejectUnauthorized: true, ca };
+          console.log('Using PG SSL CA from PG_SSL_CA_FILE');
+        } catch (e) {
+          console.warn('Failed to read PG_SSL_CA_FILE, falling back to rejectUnauthorized:false', e?.message || e);
+          opts.ssl = { rejectUnauthorized: false };
+        }
+      } else {
+        opts.ssl = { rejectUnauthorized: false };
+      }
+    } else {
+      opts.ssl = false;
+    }
+
+    console.log(`Creating new DB pool (noSsl=${noSsl}) ssl=${typeof opts.ssl === 'object' ? JSON.stringify({rejectUnauthorized: opts.ssl.rejectUnauthorized}) : opts.ssl}`);
+    internalPool = new Pool(opts);
     attachPoolHandlers(internalPool);
   }
   return pool;
@@ -86,14 +117,23 @@ export async function ensureDatabaseConnectivity(retries = 3, delayMs = 500) {
         client.release();
       }
     } catch (err) {
-      console.error(`DB connectivity attempt ${attempt} failed:`, err.message || err);
-      // try to recreate the pool on first failure
+      console.error(`DB connectivity attempt ${attempt} failed:`, err?.message || err);
+      // On first failure try recreating the pool with the same SSL options
       if (attempt === 1) {
         try {
-          await recreatePool();
-          console.log("Recreated DB pool, retrying connection");
+          await recreatePool({ noSsl: false });
+          console.log("Recreated DB pool (ssl:{rejectUnauthorized:false}), retrying connection");
         } catch (recreateErr) {
-          console.error("Failed to recreate DB pool", recreateErr);
+          console.error("Failed to recreate DB pool (ssl), will try fallback", recreateErr?.message || recreateErr);
+        }
+      }
+      // On second failure try recreating pool with SSL disabled (some hosts don't accept SSL negotiation from client)
+      if (attempt === 2) {
+        try {
+          await recreatePool({ noSsl: true });
+          console.log("Recreated DB pool with SSL disabled (noSsl=true), retrying connection");
+        } catch (recreateErr) {
+          console.error("Failed to recreate DB pool (noSsl), giving up this round", recreateErr?.message || recreateErr);
         }
       }
       if (attempt < retries) {
