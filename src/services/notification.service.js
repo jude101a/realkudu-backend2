@@ -1,5 +1,6 @@
 import { notificationQueue } from "../workers/notification.queue.js";
 import { v4 as uuidv4 } from "uuid";
+import * as NotificationModel from "../models/notification.model.js";
 
 export async function sendNotification({
   user,
@@ -11,7 +12,9 @@ export async function sendNotification({
   const jobId = uuidv4();
 
   const jobs = [];
-  const tokens = await getDeviceTokensForUser(user.id);
+  console.info('[notifications] sendNotification called', { userId: user?.id, channels, title });
+  const tokens = await NotificationModel.getDeviceTokens(user.id);
+  console.debug('[notifications] device tokens fetched', { userId: user?.id, tokenCount: tokens.length });
 
   if (channels.includes("PUSH") && tokens.length > 0) {
     jobs.push({
@@ -49,38 +52,43 @@ export async function sendNotification({
   }
 
   // Bulk enqueue
-  await Promise.all(
-    jobs.map((job) =>
-      notificationQueue.add(job.type, job, { jobId })
-    )
-  );
+  if (notificationQueue) {
+    await Promise.all(
+      jobs.map((job) =>
+        notificationQueue.add(job.type, job, { jobId }).catch((err) => {
+          console.warn("⚠️ enqueue failed", job.type, { jobId, error: err?.message || err });
+        })
+      )
+    );
+  } else {
+    console.warn("⚠️ notificationQueue unavailable — skipping enqueue", { jobTypes: jobs.map((j) => j.type), jobId });
+  }
 
   return { success: true, jobId };
 }
 
 
 
-async function getDeviceTokensForUser(userId) {
-  const result = await pool.query(
-    'SELECT token FROM device_tokens WHERE user_id = $1',
-    [userId]
-  );
-  return result.rows.map((row) => row.token);
-}
+// Device/token and notification persistence are handled by the model in src/models/notification.model.js
+
 
 export const getUserNotifications = async (req, res) => {
-  const userId = req.params.userId;
+  // Support multiple caller patterns:
+  // - authenticated routes that set req.user.id
+  // - routes that pass a userId in params (userId or id)
+  const userId = req.user?.id || req.params.userId || req.params.id;
 
   if (!userId) {
-    return res.status(401).json({ success: false, error: "Unauthorized" });
+    return res.status(400).json({ success: false, error: "userId is required" });
   }
 
-  const result = await pool.query(
-    `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC`,
-    [userId]
-  );
-
-  res.json(result.rows);
+  try {
+    const rows = await NotificationModel.getNotificationsByUser(userId);
+    return res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("❌ Error fetching notifications for user", userId, error?.message || error);
+    return res.status(500).json({ success: false, error: "Failed to fetch notifications" });
+  }
 };
 
 export const saveDeviceToken = async (req, res) => {
@@ -99,24 +107,11 @@ export const saveDeviceToken = async (req, res) => {
   }
 
   try {
-    await pool.query(
-      `
-      INSERT INTO device_tokens (user_id, token)
-      VALUES ($1, $2)
-      ON CONFLICT (token)
-      DO UPDATE SET user_id = EXCLUDED.user_id
-      `,
-      [userId, token]
-    );
-
+    await NotificationModel.saveDeviceToken(userId, token);
     return res.json({ success: true });
   } catch (error) {
-    console.error("❌ Error saving device token for user", userId, error);
-
-    return res.status(500).json({
-      success: false,
-      error: "Failed to save device token",
-    });
+    console.error("❌ Error saving device token for user", userId, error?.message || error);
+    return res.status(500).json({ success: false, error: "Failed to save device token" });
   }
 };
 
@@ -136,23 +131,10 @@ export const saveOneSignalDeviceToken = async (req, res) => {
   }
 
   try {
-    await pool.query(
-      `
-      INSERT INTO onesignal_device_tokens (user_id, token)
-      VALUES ($1, $2)
-      ON CONFLICT (token)
-      DO UPDATE SET user_id = EXCLUDED.user_id
-      `,
-      [userId, token]
-    );
-
+    await NotificationModel.saveOneSignalDeviceToken(userId, token);
     return res.json({ success: true });
   } catch (error) {
-    console.error("❌ Error saving device token for user", userId, error);
-
-    return res.status(500).json({
-      success: false,
-      error: "Failed to save device token",
-    });
+    console.error("❌ Error saving device token for user", userId, error?.message || error);
+    return res.status(500).json({ success: false, error: "Failed to save device token" });
   }
 };

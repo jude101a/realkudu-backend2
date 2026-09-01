@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import pool from "../config/db.js";
+import * as NotificationModel from "../models/notification.model.js";
 
 import serviceAccount from "../serviceAccountKey.json" assert { type: "json" };
 
@@ -8,12 +8,7 @@ admin.initializeApp({
 });
 
 export async function sendPushNotification(userId, title, body, data) {
-  const tokensResult = await pool.query(
-    `SELECT token FROM device_tokens WHERE user_id = $1`,
-    [userId]
-  );
-
-  const tokens = tokensResult.rows.map((t) => t.token);
+  const tokens = await NotificationModel.getDeviceTokens(userId);
 
   if (!tokens.length) return;
 

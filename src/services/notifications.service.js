@@ -1,4 +1,5 @@
- import pool from '../config/db.js';
+import pool from '../config/db.js';
+import * as NotificationModel from '../models/notification.model.js';
 import admin from 'firebase-admin';
 import path from 'path';
 import fs from 'fs';
@@ -42,26 +43,33 @@ const initializeFirebase = () => {
 initializeFirebase();
 
 export async function saveNotification({ userId, title, body, data }) {
-  await pool.query(
-    `INSERT INTO notifications (user_id, title, body, data) 
-     VALUES ($1, $2, $3, $4)`,
-    [userId, title, body, data]
-  );
+  const start = Date.now();
+  console.info('[notifications] saveNotification start', { userId, title });
+  try {
+    await NotificationModel.saveNotification({ userId, title, body, data });
+    console.info('[notifications] saveNotification success', { userId, title, durationMs: Date.now() - start });
+  } catch (error) {
+    console.error('[notifications] saveNotification failed', { userId, title, error: error?.message || error });
+    throw error;
+  }
 }
 
 export async function sendPushNotification(userId, title, body, data) {
+  console.info('[notifications] sendPushNotification called', { userId, title });
   if (!admin.apps.length) {
     console.warn('⚠️ Firebase not initialized, skipping push notification for user', userId);
     return;
   }
 
   const tokens = await getDeviceTokensForUser(userId);
+  console.debug('[notifications] sendPushNotification tokens', { userId, tokenCount: tokens.length });
   if (!tokens.length) {
     console.warn('⚠️ No device tokens found for user', userId);
     return;
   }
 
   try {
+    const start = Date.now();
     const response = await admin.messaging().sendEachForMulticast({
       tokens,
       notification: { title, body },
@@ -70,25 +78,27 @@ export async function sendPushNotification(userId, title, body, data) {
       ),
     });
 
-    console.log(
-      `✅ Push notification sent for user ${userId}: ${response.successCount}/${response.failureCount} success`
-    );
+    console.info('[notifications] sendPushNotification result', { userId, successCount: response.successCount, failureCount: response.failureCount, durationMs: Date.now() - start });
 
     if (response.failureCount > 0) {
-      console.error('❌ Push send failures', response.responses);
+      console.error('❌ Push send failures', { userId, responses: response.responses });
     }
   } catch (error) {
-    console.error('❌ Firebase push send failed for user', userId, error);
+    console.error('❌ Firebase push send failed for user', userId, error?.message || error);
     throw error;
   }
 }
 
 async function getDeviceTokensForUser(userId) {
-  const result = await pool.query(
-    'SELECT token FROM device_tokens WHERE user_id = $1',
-    [userId]
-  );
-  return result.rows.map((row) => row.token);
+  console.debug('[notifications] getDeviceTokensForUser query', { userId });
+  try {
+    const tokens = await NotificationModel.getDeviceTokens(userId);
+    console.debug('[notifications] getDeviceTokensForUser result', { userId, tokenCount: tokens.length });
+    return tokens;
+  } catch (error) {
+    console.error('[notifications] getDeviceTokensForUser failed', { userId, error: error?.message || error });
+    return [];
+  }
 }
 
 export const getUserNotifications = async (req, res) => {
@@ -98,12 +108,13 @@ export const getUserNotifications = async (req, res) => {
     return res.status(401).json({ success: false, error: "Unauthorized" });
   }
 
-  const result = await pool.query(
-    `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC`,
-    [userId]
-  );
-
-  res.json(result.rows);
+  try {
+    const rows = await NotificationModel.getNotificationsByUser(userId);
+    return res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('[notifications.service] getUserNotifications failed', { userId, error: error?.message || error });
+    return res.status(500).json({ success: false, error: 'Failed to fetch notifications' });
+  }
 };
 
 export const saveDeviceToken = async (req, res) => {
@@ -122,16 +133,7 @@ export const saveDeviceToken = async (req, res) => {
   }
 
   try {
-    await pool.query(
-      `
-      INSERT INTO device_tokens (user_id, token)
-      VALUES ($1, $2)
-      ON CONFLICT (token)
-      DO UPDATE SET user_id = EXCLUDED.user_id
-      `,
-      [userId, token]
-    );
-
+    await NotificationModel.saveDeviceToken(userId, token);
     return res.json({ success: true });
   } catch (error) {
     console.error("❌ Error saving device token for user", userId, error);
@@ -159,16 +161,7 @@ export const saveOneSignalDeviceToken = async (req, res) => {
   }
 
   try {
-    await pool.query(
-      `
-      INSERT INTO onesignal_device_tokens (user_id, token)
-      VALUES ($1, $2)
-      ON CONFLICT (token)
-      DO UPDATE SET user_id = EXCLUDED.user_id
-      `,
-      [userId, token]
-    );
-
+    await NotificationModel.saveOneSignalDeviceToken(userId, token);
     return res.json({ success: true });
   } catch (error) {
     console.error("❌ Error saving device token for user", userId, error);
@@ -186,41 +179,15 @@ export const getOneSignalDeviceToken = async (req, res) => {
   const userId = req.userId;
 
   if (!userId) {
-    return res.status(401).json({
-      success: false,
-      error: "Unauthorized",
-    });
+    return res.status(401).json({ success: false, error: "Unauthorized" });
   }
 
   try {
-    const result = await pool.query(
-      `
-      SELECT token 
-      FROM onesignal_device_tokens 
-      WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT 1
-      `,
-      [userId]
-    );
-
-    const token = result.rows[0]?.token || null;
-
-    return res.json({
-      success: true,
-      token,
-    });
+    const token = await NotificationModel.getOneSignalToken(userId);
+    return res.json({ success: true, token });
   } catch (error) {
-    console.error(
-      "❌ Error fetching device token for user",
-      userId,
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      error: "Failed to fetch device token",
-    });
+    console.error('❌ Error fetching device token for user', userId, error?.message || error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch device token' });
   }
 };
 
@@ -247,7 +214,7 @@ export const sendNotificationToUser = async (req, res) => {
       });
     }
 
-    const userToken = await getOneSignalDeviceToken(userId);
+    const userToken = await NotificationModel.getOneSignalToken(userId);
 
     // Validate OneSignal config
     // if (!ONE_SIGNAL_CONFIG.appId || !ONE_SIGNAL_CONFIG.apiKey) {
