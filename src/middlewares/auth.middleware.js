@@ -11,24 +11,22 @@ export const protect = (req, res, next) => {
     });
   }
 
-  try {
-    console.log("JWT_SECRET:", process.env.JWT_SECRET);
-    console.log("TOKEN:", token);
-
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-
-    req.user = payload;
-
-    next();
-
-} catch (err) {
-
-    console.error(err);
-
-    return res.status(401).json({
-        success: false,
-        error: err.message,
+  if (!process.env.JWT_SECRET) {
+    return res.status(500).json({
+      success: false,
+      error: "JWT_SECRET is not configured",
     });
+  }
 
-}
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = payload;
+    return next();
+  } catch (err) {
+    console.error(err);
+    return res.status(401).json({
+      success: false,
+      error: err.message,
+    });
+  }
 };

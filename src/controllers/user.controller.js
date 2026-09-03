@@ -30,6 +30,7 @@ const isUuid = (value) => UUID_RE.test(String(value || ""));
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 const normalizeProvider = (provider) => String(provider || "").trim().toLowerCase();
+const getJwtSecret = () => process.env.JWT_SECRET || null;
 
 const sendSuccess = (res, status, payload) =>
   res.status(status).json({ success: true, ...payload });
@@ -156,6 +157,11 @@ export const login = async (req, res, next) => {
       return sendError(res, 400, "Email and password are required");
     }
 
+    const jwtSecret = getJwtSecret();
+    if (!jwtSecret) {
+      return sendError(res, 500, "JWT_SECRET is not configured");
+    }
+
     const user = await findUserByEmail(normalizeEmail(email));
     if (!user) {
       return sendError(res, 401, "Invalid credentials");
@@ -168,7 +174,7 @@ export const login = async (req, res, next) => {
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
+      jwtSecret,
       { expiresIn: JWT_EXPIRES_IN }
     );
 try {
@@ -370,10 +376,15 @@ export const socialLogin = async (req, res, next) => {
       // await updateUserById(user.id, { is_verified: true });
     }
 
+    const jwtSecret = getJwtSecret();
+    if (!jwtSecret) {
+      return sendError(res, 500, "JWT_SECRET is not configured");
+    }
+
     const expiresIn = rememberMe ? "30d" : JWT_EXPIRES_IN;
     const jwtToken = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
+      jwtSecret,
       { expiresIn }
     );
 

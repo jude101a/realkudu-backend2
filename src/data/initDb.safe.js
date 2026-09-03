@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
 
-const MIGRATION_NAME = "bootstrap_schema_v3";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v11";
+const MIGRATION_NAME = "bootstrap_schema_v4";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v13";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
@@ -161,6 +161,7 @@ const USER_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
   { name: "email", typeSql: "VARCHAR(255)" },
   { name: "phone_number", typeSql: "VARCHAR(20)" },
   { name: "password_hash", typeSql: "TEXT" },
+  { name: "date_of_birth", typeSql: "DATE" },
   { name: "transaction_pin", typeSql: "CHAR(4)" },
   { name: "address", typeSql: "TEXT" },
   { name: "profile_image_url", typeSql: "TEXT" },
@@ -902,6 +903,7 @@ async function createCoreTables(client) {
       marital_status VARCHAR(20) DEFAULT 'single',
       number_of_children SMALLINT DEFAULT 0 CHECK (number_of_children >= 0),
       hobbies TEXT,
+      date_of_birth DATE,
       nin VARCHAR(11) UNIQUE,
       bvn VARCHAR(11) UNIQUE,
       role VARCHAR(50) DEFAULT 'user',
@@ -985,7 +987,7 @@ async function createCoreTables(client) {
   `);
 
   await client.query(`
-    CREATE TABLE IF NOT EXISTS notifications (
+    CREATE TABLE IF NOT EXISTS notification (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL,
       title TEXT NOT NULL,
@@ -1075,7 +1077,7 @@ async function ensureNotificationTables(client) {
   `);
 
   await client.query(`
-    CREATE TABLE IF NOT EXISTS notifications (
+    CREATE TABLE IF NOT EXISTS notification (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL,
       title TEXT NOT NULL,
@@ -1087,7 +1089,7 @@ async function ensureNotificationTables(client) {
   `);
 
   await client.query(`
-    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_notification_user_id ON notification(user_id);
   `);
 }
 

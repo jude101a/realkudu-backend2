@@ -1,6 +1,6 @@
 import pool from "../config/db.js";
 
-const NOTIFICATIONS_TABLE = "notifications";
+const NOTIFICATIONS_TABLE = "notification";
 const DEVICE_TOKENS_TABLE = "device_tokens";
 const ONESIGNAL_TABLE = "onesignal_device_tokens";
 

@@ -6,184 +6,180 @@ dotenv.config();
 
 const { Pool } = pg;
 
-const dbUrl =
-  process.env.NODE_ENV === "production"
-    ? process.env.DATABASE_INTERNAL_URL || process.env.DATABASE_URL
-    : process.env.DATABASE_URL;
+// --- Resolve connection string --------------------------------------------
+// NOTE: Pick ONE source of truth. If you're on Render and using the internal
+// URL for prod, that's fine — but log it loudly so a URL rotation never goes
+// unnoticed again like it did with Redis.
+const isProd = process.env.NODE_ENV === "production";
+const dbUrl = isProd
+  ? process.env.DATABASE_INTERNAL_URL || process.env.DATABASE_URL
+  : process.env.DATABASE_URL;
 
 if (!dbUrl) {
   throw new Error("DATABASE_URL is not defined.");
 }
 
 const parsed = new URL(dbUrl);
+const usingInternal = isProd && !!process.env.DATABASE_INTERNAL_URL;
 
-console.log("NODE_ENV:", process.env.NODE_ENV);
-console.log("DB HOST:", parsed.hostname);
-console.log("DB DATABASE:", parsed.pathname);
-console.log("DB USER:", parsed.username);
+console.log("[db] NODE_ENV:", process.env.NODE_ENV);
+console.log("[db] Using:", usingInternal ? "DATABASE_INTERNAL_URL" : "DATABASE_URL");
+console.log("[db] HOST:", parsed.hostname);
+console.log("[db] DATABASE:", parsed.pathname.replace("/", ""));
+console.log("[db] USER:", parsed.username);
 
-console.log("***** NEW DB FILE LOADED *****");
+// --- SSL ---------------------------------------------------------------
+function resolveSslOptions() {
+  if (String(process.env.DB_SSL).toLowerCase() === "false") {
+    console.warn("[db] SSL explicitly disabled via DB_SSL=false");
+    return false;
+  }
 
-// internalPool holds the real pg Pool instance; we export a proxy so other modules can keep
-// using the same `pool` import even if we recreate the underlying Pool on errors.
-// SSL should be enabled by default; only disable if PG explicitly requires it (not recommended).
-// Historically DB_SSL could disable SSL; to keep connections secure we'll default to SSL on.
-let defaultNoSsl = false;
-if (typeof process.env.DB_SSL !== 'undefined') {
-  console.warn('DB_SSL environment variable detected — SSL will remain enabled by default to ensure secure DB connections.');
+  const caBase64 = process.env.PG_SSL_CA_BASE64;
+  const caFile = process.env.PG_SSL_CA_FILE;
+
+  if (caBase64) {
+    try {
+      return { rejectUnauthorized: true, ca: Buffer.from(caBase64, "base64").toString() };
+    } catch (e) {
+      console.warn("[db] Failed to parse PG_SSL_CA_BASE64:", e.message);
+    }
+  }
+  if (caFile && fs.existsSync(caFile)) {
+    try {
+      return { rejectUnauthorized: true, ca: fs.readFileSync(caFile, "utf8") };
+    } catch (e) {
+      console.warn("[db] Failed to read PG_SSL_CA_FILE:", e.message);
+    }
+  }
+  // Most managed PG providers (Render, Supabase, Neon) use certs not in the
+  // default CA store, so rejectUnauthorized:false is the pragmatic default.
+  return { rejectUnauthorized: false };
 }
 
-let internalPool = (() => {
-  const opts = { connectionString: dbUrl };
-  if (defaultNoSsl) {
-    opts.ssl = false;
-    console.log('DB SSL disabled via DB_SSL=false');
-  } else {
-    opts.ssl = { rejectUnauthorized: String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "false").toLowerCase() !== 'false' ? true : false };
-  }
-  return new Pool(opts);
-})();
+// --- Pool config ---------------------------------------------------------
+const POOL_OPTS = {
+  connectionString: dbUrl,
+  ssl: resolveSslOptions(),
+  max: Number(process.env.DB_POOL_MAX || 10),
+  min: Number(process.env.DB_POOL_MIN || 0),
+  idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),   // close idle clients after 30s
+  connectionTimeoutMillis: Number(process.env.DB_CONN_TIMEOUT_MS || 5000), // fail fast if can't acquire
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+};
+
+let internalPool = new Pool(POOL_OPTS);
+let recreating = null; // dedupe concurrent recreate calls
 
 function attachPoolHandlers(p) {
   p.on("error", (err) => {
-    console.error("Unexpected Postgres client error on idle client", err);
+    // Fired for errors on IDLE clients (not caught by query try/catch).
+    // This is the case that silently breaks pools after a URL/host change.
+    console.error("[db] Idle client error, scheduling pool recreate:", err.message);
+    recreatePool().catch((e) => console.error("[db] Recreate after idle error failed:", e.message));
   });
 }
-
 attachPoolHandlers(internalPool);
+
+export async function recreatePool() {
+  if (recreating) return recreating; // avoid thundering herd
+  recreating = (async () => {
+    const old = internalPool;
+    internalPool = new Pool(POOL_OPTS);
+    attachPoolHandlers(internalPool);
+    try {
+      await old.end();
+    } catch (e) {
+      console.warn("[db] Error closing old pool:", e.message);
+    }
+    console.log("[db] Pool recreated");
+  })();
+  try {
+    await recreating;
+  } finally {
+    recreating = null;
+  }
+  return internalPool;
+}
+
+// --- Proxy so imports of `pool` survive underlying recreation ------------
+const TRANSIENT_ERRORS = new Set(["ECONNRESET", "ECONNREFUSED", "57P01", "08006", "08003"]);
+
+function isTransient(err) {
+  const msg = String(err?.message || "").toLowerCase();
+  return (
+    msg.includes("connection terminated unexpectedly") ||
+    msg.includes("terminating connection") ||
+    TRANSIENT_ERRORS.has(err?.code)
+  );
+}
 
 const pool = new Proxy(
   {},
   {
     get(_, prop) {
-      // Special-case `query` to add a single automatic retry+recreate on transient connection failures
       if (prop === "query") {
         return async function queryWithRetry(text, params) {
           try {
             return await internalPool.query(text, params);
           } catch (err) {
-            const msg = String(err?.message || "").toLowerCase();
-            const isTransient = msg.includes("connection terminated unexpectedly") || msg.includes("ecoff") || err?.code === "ECONNRESET" || err?.code === "ECONNREFUSED";
-            if (isTransient) {
-              console.warn('[db] transient query error, attempting pool recreate then retry', { message: err?.message || err });
-              try {
-                await recreatePool();
-                return await internalPool.query(text, params);
-              } catch (retryErr) {
-                console.error('[db] retry after recreate failed', { error: retryErr?.message || retryErr });
-                throw retryErr;
-              }
+            if (isTransient(err)) {
+              console.warn("[db] Transient query error, retrying once:", err.message);
+              await recreatePool();
+              return await internalPool.query(text, params);
             }
             throw err;
           }
         };
       }
-
       const val = internalPool[prop];
-      if (typeof val === "function") return val.bind(internalPool);
-      return val;
+      return typeof val === "function" ? val.bind(internalPool) : val;
     },
   }
 );
 
-export async function recreatePool({ noSsl = undefined } = {}) {
-  try {
-    if (internalPool) {
-      try {
-        await internalPool.end();
-      } catch (e) {
-        console.warn("Error ending old internalPool", e?.message || e);
-      }
-    }
-  } finally {
-    const opts = {
-      connectionString: dbUrl,
-    };
-
-    // Prefer explicit CA if provided via env (base64 or file path)
-    const caBase64 = process.env.PG_SSL_CA_BASE64;
-    const caFile = process.env.PG_SSL_CA_FILE;
-
-    // Decide ssl mode: if noSsl explicitly true use false; else if undefined use defaultNoSsl; else use provided value
-    const finalNoSsl = typeof noSsl === 'boolean' ? noSsl : defaultNoSsl;
-    if (!finalNoSsl) {
-      if (caBase64) {
-        try {
-          const ca = Buffer.from(caBase64, 'base64').toString();
-          opts.ssl = { rejectUnauthorized: true, ca };
-          console.log('Using PG SSL CA from PG_SSL_CA_BASE64');
-        } catch (e) {
-          console.warn('Failed to parse PG_SSL_CA_BASE64, falling back to rejectUnauthorized:false', e?.message || e);
-          opts.ssl = { rejectUnauthorized: false };
-        }
-      } else if (caFile && fs.existsSync(caFile)) {
-        try {
-          const ca = fs.readFileSync(caFile, 'utf8');
-          opts.ssl = { rejectUnauthorized: true, ca };
-          console.log('Using PG SSL CA from PG_SSL_CA_FILE');
-        } catch (e) {
-          console.warn('Failed to read PG_SSL_CA_FILE, falling back to rejectUnauthorized:false', e?.message || e);
-          opts.ssl = { rejectUnauthorized: false };
-        }
-      } else {
-        opts.ssl = { rejectUnauthorized: false };
-      }
-    } else {
-      opts.ssl = false;
-    }
-
-    console.log(`Creating new DB pool (noSsl=${finalNoSsl}) ssl=${typeof opts.ssl === 'object' ? JSON.stringify({rejectUnauthorized: opts.ssl.rejectUnauthorized}) : opts.ssl}`);
-    internalPool = new Pool(opts);
-    attachPoolHandlers(internalPool);
-  }
-  return pool;
-}
-
+// --- Startup connectivity check with backoff ------------------------------
 export async function ensureDatabaseConnectivity(retries = 3, delayMs = 500) {
-  let attempt = 0;
-  while (attempt < retries) {
-    attempt += 1;
-    try {
-      const client = await pool.connect();
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const client = await pool.connect().catch((err) => {
+      console.error(`[db] Connectivity attempt ${attempt} failed:`, err.message);
+      return null;
+    });
+    if (client) {
       try {
         const result = await client.query("SELECT NOW()");
-        console.log("✅ DB Connected", result.rows[0]);
+        console.log("[db] ✅ Connected:", result.rows[0]);
         return true;
       } finally {
         client.release();
       }
-    } catch (err) {
-      console.error(`DB connectivity attempt ${attempt} failed:`, err?.message || err);
-      // On first failure try recreating the pool with the same SSL options
-      if (attempt === 1) {
-        try {
-          await recreatePool({ noSsl: false });
-          console.log("Recreated DB pool (ssl:{rejectUnauthorized:false}), retrying connection");
-        } catch (recreateErr) {
-          console.error("Failed to recreate DB pool (ssl), will try fallback", recreateErr?.message || recreateErr);
-        }
-      }
-      // Only attempt non-SSL fallback if DB_SSL was explicitly set to false
-      if (attempt === 2 && defaultNoSsl) {
-        try {
-          await recreatePool({ noSsl: true });
-          console.log("Recreated DB pool with SSL disabled (noSsl=true), retrying connection");
-        } catch (recreateErr) {
-          console.error("Failed to recreate DB pool (noSsl), giving up this round", recreateErr?.message || recreateErr);
-        }
-      }
-      if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, delayMs * attempt));
-      } else {
-        throw err;
-      }
+    }
+    if (attempt < retries) {
+      await new Promise((r) => setTimeout(r, delayMs * attempt));
+    } else {
+      throw new Error("Database connectivity check failed after retries");
     }
   }
 }
 
+// --- Graceful shutdown -----------------------------------------------------
+async function shutdown(signal) {
+  console.log(`[db] ${signal} received, closing pool...`);
+  try {
+    await internalPool.end();
+    console.log("[db] Pool closed cleanly");
+  } catch (e) {
+    console.error("[db] Error closing pool:", e.message);
+  } finally {
+    process.exit(0);
+  }
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 export default pool;
 
-// Test helper: allow replacing the internal pool (useful for unit tests)
 export function __setInternalPoolForTests(mockPool) {
   internalPool = mockPool;
   attachPoolHandlers(internalPool);
