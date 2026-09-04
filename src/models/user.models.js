@@ -125,6 +125,7 @@ export const createUser = async (data) => {
     numberOfChildren,
     hobbies,
     role,
+    dateOfBirth
   ];
 
   const { rows } = await pool.query(query, values);
