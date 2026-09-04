@@ -1,6 +1,6 @@
 import pool from "../config/db.js";
 
-const MIGRATION_NAME = "bootstrap_schema_v4";
+const MIGRATION_NAME = "bootstrap_schema_v6";
 const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v13";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
@@ -1025,13 +1025,19 @@ async function createCoreTables(client) {
       completed_at TIMESTAMPTZ,
       released_at TIMESTAMPTZ
     );
-    CREATE INDEX idx_transactions_user_id ON transactions(user_id);
-    CREATE INDEX idx_transactions_property_id ON transactions(property_id);
-    CREATE INDEX idx_transactions_reference ON transactions(reference);
-    CREATE INDEX idx_transactions_status ON transactions(status);
 
     
   `);
+
+  await client.query(`
+  ALTER TABLE transactions
+    ADD COLUMN IF NOT EXISTS user_id UUID,
+    ADD COLUMN IF NOT EXISTS property_id UUID;
+`);
+await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);`);
+await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_property_id ON transactions(property_id);`);
+await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_reference ON transactions(reference);`);
+await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);`);
   
 
 
@@ -1198,7 +1204,7 @@ async function createPropertyTables(client) {
   await ensurePropertyTableHotfix(client);
 
   await client.query(`
-    CREATE TABLE property_purchase_activities (
+    CREATE TABLE IF NOT EXISTS property_purchase_activities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   property_id UUID NOT NULL,
   user_id UUID NOT NULL,               -- the buyer
@@ -1211,9 +1217,9 @@ async function createPropertyTables(client) {
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_activities_property_id ON property_purchase_activities(property_id);
-CREATE INDEX idx_activities_user_id ON property_purchase_activities(user_id);
-CREATE INDEX idx_activities_transaction_id ON property_purchase_activities(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_activities_property_id ON property_purchase_activities(property_id);
+CREATE INDEX IF NOT EXISTS idx_activities_user_id ON property_purchase_activities(user_id);
+CREATE INDEX IF NOT EXISTS idx_activities_transaction_id ON property_purchase_activities(transaction_id);
 
 `);
   }
