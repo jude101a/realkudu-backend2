@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v6";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v13";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v14";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
