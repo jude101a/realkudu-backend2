@@ -1,12 +1,17 @@
 import nodemailer from "nodemailer";
+import dns from "dns";
 
 export const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: false,
+  port: process.env.SMTP_PORT,
+  secure: true,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
+  },
+  // Force this specific connection to resolve IPv4 only
+  lookup: (hostname, options, callback) => {
+    dns.lookup(hostname, { family: 4 }, callback);
   },
 });
 

@@ -5,8 +5,7 @@ import app from "./app.js";
 import { ensureDatabaseConnectivity } from "./config/db.js";
 import { initializeDatabaseTablesSafe } from "./data/initDb.safe.js";
 import { transporter } from "./utils/email.js";
-import dns from "dns";
-dns.setDefaultResultOrder("ipv4first");
+
 
 const PORT = process.env.PORT || 5001;
 const requireDbOnStartup =
