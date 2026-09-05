@@ -1,8 +1,0 @@
-[dotenv@17.3.1] injecting env (15) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
-✅ Database connection successful
-[DB] migration started
-[DB] extensions - completed
-[DB] _migration_history - completed
-[DB] migration skipped (already applied)
-✅ Database tables ensured
-🚀 Server running on port 3000
