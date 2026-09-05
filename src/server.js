@@ -25,13 +25,6 @@ const validateStartupEnv = () => {
   }
 };
 
-const withTimeout = (promise, ms, label) => {
-  const timeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-  );
-  return Promise.race([promise, timeout]);
-};
-
 const formatDbError = (err) => {
   if (!err) return "Unknown database error";
 
@@ -102,7 +95,7 @@ const start = async () => {
     }
 
     try {
-      await withTimeout(transporter.verify(), 5000, "SMTP verify");
+      await transporter.verify();
       console.log("✅ SMTP connection successful");
     } catch (smtpErr) {
       const smtpMessage = formatSmtpError(smtpErr);
