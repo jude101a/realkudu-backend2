@@ -5,6 +5,8 @@ import app from "./app.js";
 import { ensureDatabaseConnectivity } from "./config/db.js";
 import { initializeDatabaseTablesSafe } from "./data/initDb.safe.js";
 import { transporter } from "./utils/email.js";
+import dns from "dns";
+dns.setDefaultResultOrder("ipv4first");
 
 const PORT = process.env.PORT || 5001;
 const requireDbOnStartup =
@@ -21,6 +23,13 @@ const validateStartupEnv = () => {
       `Missing required environment variables: ${missing.join(", ")}`
     );
   }
+};
+
+const withTimeout = (promise, ms, label) => {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+  );
+  return Promise.race([promise, timeout]);
 };
 
 const formatDbError = (err) => {
@@ -93,7 +102,7 @@ const start = async () => {
     }
 
     try {
-      await transporter.verify();
+      await withTimeout(transporter.verify(), 5000, "SMTP verify");
       console.log("✅ SMTP connection successful");
     } catch (smtpErr) {
       const smtpMessage = formatSmtpError(smtpErr);
