@@ -1682,7 +1682,7 @@ async function ensureUpdatedAtTrigger(client) {
 
 async function ensureIndexes(client) {
   const indexSql = [
-    `CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_notification_user_id ON notification(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
     `CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users(phone_number)`,
     `CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at)`,
@@ -1747,7 +1747,7 @@ export async function initializeDatabaseTablesSafe() {
       return { success: true, skipped: true };
     }
 
-    await runStep(client, "custom types", () => ensureCustomTypes(client));
+    await runStep(client, "custom types/enums", () => ensureCustomTypes(client));
     await runStep(client, "core tables", () => createCoreTables(client));
     await runStep(client, "ensure admin columns", () => ensureAdminColumns(client));
     await runStep(client, "property tables", () => createPropertyTables(client));
