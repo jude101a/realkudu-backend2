@@ -2,7 +2,8 @@ import PropertyModel from "../models/property.model.js";
 import ImagesModel from "../models/utility.models/images.js";
 import jwt from "jsonwebtoken";
 import SellerModel from "../models/seller.model.js";
-
+import { sendNotification } from "../services/notification.service.js";
+import { logger } from "@sentry/node";
 import {
   uploadToCloudinary,
   toMediaPayload,
@@ -139,8 +140,8 @@ const respondWithList = (res, result, message) =>
 
 export const createProperty = wrap(async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
-    const { user_id, seller_id } = jwt.verify(token, process.env.JWT_SECRET);
-    const seller = await SellerModel.findById(seller_id);
+  const { id: tokenUserId } = jwt.verify(token, process.env.JWT_SECRET);
+
   const payload = stripImmutableFields(req.body || {});
   const missing = REQUIRED_CREATE_FIELDS.filter((field) => payload[field] === undefined);
 
@@ -153,49 +154,36 @@ export const createProperty = wrap(async (req, res) => {
   if (!validateUuidField(res, payload.houseId, "houseId", false)) return;
   if (!validateUuidField(res, payload.lawyerId, "lawyerId", false)) return;
   if (!validateUuidField(res, payload.buyerId, "buyerId", false)) return;
-
   const created = await PropertyModel.create(payload);
 
   // If files were uploaded in the same request, upload them and associate with property
-  const files = req.files || (req.file ? [req.file] : []);
-  if (files.length) {
-    const uploads = [];
-    try {
-      for (const file of files) {
-        uploads.push(await uploadToCloudinary(file));
-      }
-
-      const coverIndex = Number(req.body.coverIndex);
-      const images = uploads.map((upload, index) =>
-        toMediaPayload({
-          propertyId: created.property_id,
-          isCover: Number.isInteger(coverIndex) && coverIndex === index,
-          file: files[index],
-          upload,
-        })
-      );
-
-      await ImagesModel.insertMultipleImages(created.property_id, images);
-    } catch (err) {
-      // best-effort: log and continue
-      console.error("error uploading property images", err?.message || err);
-    }
+ const seller = await SellerModel.findById(payload.sellerId);
+  if (!seller) {
+    return fail(res, 404, "Seller not found", "SELLER_NOT_FOUND");
+  }
+  if (seller.user_id !== tokenUserId) {
+    return fail(res, 403, "You do not have permission to list for this seller account", "FORBIDDEN");
   }
 
+  const created = await PropertyModel.create(payload);
+
+  
+    
+
   try {
-      await sendNotification({
-  title: "Property created",
-  body: `Your property ${created.name} has been created and is now in the review process.\nIf you did not make this change, please contact support immediately.`,
-  channels: ["EMAIL"],
-  data: {},
-  email: seller.email,
-  jobName: "sendAccountActionEmail",
-  userName: seller.first_name,
-  userId: seller_id,
-});
-    } catch (error) {
-      logger.error("Failed to send set lawyer status update notification:", error.message || error);
-    }
+    await sendNotification({
+      title: "Property created",
+      body: `Your property ${created.name} has been created and is now in the review process.\nIf you did not make this change, please contact support immediately.`,
+      channels: ["EMAIL"],
+      data: {},
+      email: seller.email,
+      jobName: "sendAccountActionEmail",
+      userName: seller.first_name,
+      userId: seller.id,
+    });
+  } catch (error) {
+    logger.error("Failed to send property creation notification:", error.message || error);
+  }
 
   return ok(res, created, "Property created successfully", undefined, 201);
 });
