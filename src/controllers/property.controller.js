@@ -160,9 +160,7 @@ export const createProperty = wrap(async (req, res) => {
   if (!seller) {
     return fail(res, 404, "Seller not found", "SELLER_NOT_FOUND");
   }
-  if (seller.user_id !== tokenUserId) {
-    return fail(res, 403, "You do not have permission to list for this seller account", "FORBIDDEN");
-  }
+  
 
   const created = await PropertyModel.create(payload);
 
