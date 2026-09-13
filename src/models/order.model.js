@@ -2,7 +2,7 @@ import pool from "../config/db.js";
 import { withTransaction } from "../config/withTransaction.js";
 import { mapPayload, buildInsert } from "../utils/mapPayload.js";
 import PurchaseProcessStepModel from "./purchase.process.model.js";
-import AppError from "../utils/AppError.js";
+import AppError from "../utils/appError.js";
 
 const ORDERS_TABLE = "orders";
 
