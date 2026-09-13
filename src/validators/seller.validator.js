@@ -32,8 +32,30 @@ export const registerCompanySellerSchema = Joi.object({
   cacNumber: Joi.string().trim().max(50).required(),
   tinNumber: Joi.string().trim().max(50).allow(null, ""),
   cacDocumentUrl: Joi.string().uri().max(2048).allow(null, ""),
+  memorandumDocumentUrl: Joi.string().uri().max(2048).allow(null, ""),
+  utilityBillDocumentUrl: Joi.string().uri().max(2048).allow(null, ""),
   businessSpecification: Joi.string().trim().max(5000).allow(null, ""),
   businessProfileImageUrl: Joi.string().uri().max(2048).allow(null, ""),
+  businessLga: Joi.string().trim().max(255).allow(null, ""),
+  businessState: Joi.string().trim().max(255).allow(null, ""),
+  businessWebsite: Joi.string().uri().max(2048).allow(null, ""),
+  businessDescription: Joi.string().trim().max(5000).allow(null, ""),
+  primaryShareholderName: Joi.string().trim().max(255).required(),
+  primaryShareholderEmail: Joi.string().email().max(255).required(),
+  primaryShareholderPhone: Joi.string().trim().max(20).required(),
+  primaryShareholderIdDocumentUrl: Joi.string().uri().max(2048).required(),
+  primaryShareholderNin: Joi.string().trim().length(11).pattern(/^\d+$/).required(),
+  additionalShareholders: Joi.array()
+    .items(
+      Joi.object({
+        firstName: Joi.string().trim().required(),
+        lastName: Joi.string().trim().required(),
+        bvn: Joi.string().trim().length(11).pattern(/^\d+$/).required(),
+        nin: Joi.string().trim().length(11).pattern(/^\d+$/).required(),
+        title: Joi.string().trim().allow(null, ""),
+      })
+    )
+    .allow(null),
 });
 
 export const sellerListQuerySchema = Joi.object({
