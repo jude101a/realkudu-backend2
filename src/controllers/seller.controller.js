@@ -117,6 +117,13 @@ const isValidUuid = (value) => typeof value === "string" && UUID_RE.test(value);
 // Per-seller-type configuration
 // ---------------------------------------------------------------------------
 
+const assertUuid = (res, value, label) => {
+  if (!isValidUuid(value)) {
+    fail(res, 400, `${label} must be a valid UUID`, "VALIDATION_ERROR");
+    return false;
+  }
+  return true;
+};
 const SELLER_FIELD_CONFIG = {
   [SellerType.INDIVIDUAL]: {
     // Fields beyond userId/businessName that must be present for this type
