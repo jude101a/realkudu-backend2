@@ -8,7 +8,7 @@ const BRAND_COLOR = "#0f172a";
 const ACCENT_COLOR = "#2563eb";
 const SUPPORT_EMAIL = "support@realkudu.com";
 
-// 1. SECURITY ALERT — new login, password change, suspicious activity
+// 1. SECURITY ALERT — new login, password changes, suspicious activity
 export const buildSecurityAlertEmail = ({ userName, action, device, location, time, secureLink }) =>
   renderBaseTemplate({
     preheader: `Security alert on your Real Kudu account`,
