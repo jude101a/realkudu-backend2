@@ -1,11 +1,12 @@
 import { logger } from "@sentry/node";
 import jwt from "jsonwebtoken";
-import { findUserById } from "../models/user.models.js";
+import { findUserById, userUpgradeToSeller } from "../models/user.models.js";
 import SellerModel, {
   SellerStatus,
   SellerType,
   SellerVerificationStatus,
 } from "../models/seller.model.js";
+import { sendNotification } from "../services/notification.service.js";
   import { notificationQueue } from "../queues/notification.queue.js";
 
 const UUID_RE =
@@ -208,7 +209,6 @@ async function createSeller(req, type) {
 
   const config = SELLER_FIELD_CONFIG[type];
   if (!config) {
-    // Internal guard only — should never be hit via the exported handlers.
     return {
       ok: false,
       status: 500,
@@ -223,6 +223,14 @@ async function createSeller(req, type) {
       status: 400,
       message: "userId must be a valid UUID",
       code: "VALIDATION_ERROR",
+    };
+  }
+  if (userId !== tokenUserId) {
+    return {
+      ok: false,
+      status: 403,
+      message: "userId does not match authenticated user",
+      code: "FORBIDDEN",
     };
   }
 
@@ -248,31 +256,44 @@ async function createSeller(req, type) {
 
   const payload = config.buildPayload(body);
   const created = await config.register(payload);
-  
+  const newSeller = created.rows[0];
+
+  // Mark the user as upgraded now that seller creation succeeded.
+  // NOTE: userUpgradeToSeller runs as its own statement, not inside the
+  // same transaction as config.register() above. If register() commits
+  // but this fails, the seller row exists but the user isn't flagged
+  // upgraded — worth a reconciliation job/alert, or moving this call
+  // inside registerCompanySellerWithUserValidation /
+  // registerIndividualSellerWithUserValidation if those already run in
+  // a transaction, so both writes commit or roll back together.
+  try {
+    await userUpgradeToSeller(tokenUserId);
+  } catch (error) {
+    logger.error("Failed to mark user as upgraded after seller creation:", error.message || error);
+  }
 
   try {
-      await sendNotification({
-  title: "Account Upgrade Successful",
-  body: `You have upgraded your account to a seller tier.\nHurry, start listing your properties!\n\n If you have any questions, please contact support immediately.`,
-  channels: ["EMAIL"],
-  data: {},
-  email: created.rows[0].email,
-  jobName: "sendAccountActionEmail",
-  userName: created.rows[0].first_name,
-  userId: seller_id,
-});
-    } catch (error) {
-      logger.error("Failed to send seller notification:", error.message || error);
-    }
+    await sendNotification({
+      title: "Account Upgrade Successful",
+      body: `You have upgraded your account to a seller tier.\nHurry, start listing your properties!\n\n If you have any questions, please contact support immediately.`,
+      channels: ["EMAIL"],
+      data: {},
+      email: newSeller.email,
+      jobName: "sendAccountActionEmail",
+      userName: newSeller.first_name,
+      userId: newSeller.id,
+    });
+  } catch (error) {
+    logger.error("Failed to send seller notification:", error.message || error);
+  }
 
   return {
     ok: true,
     status: 201,
     message: config.successMessage,
-    data: sanitizeSeller(created.rows[0]),
+    data: sanitizeSeller(newSeller),
   };
 }
-
 // ---------------------------------------------------------------------------
 // Route handlers (thin — just translate result -> HTTP response)
 // ---------------------------------------------------------------------------
