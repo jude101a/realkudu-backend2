@@ -154,7 +154,6 @@ export const createProperty = wrap(async (req, res) => {
   if (!validateUuidField(res, payload.houseId, "houseId", false)) return;
   if (!validateUuidField(res, payload.lawyerId, "lawyerId", false)) return;
   if (!validateUuidField(res, payload.buyerId, "buyerId", false)) return;
-  const created = await PropertyModel.create(payload);
 
   // If files were uploaded in the same request, upload them and associate with property
  const seller = await SellerModel.findById(payload.sellerId);
