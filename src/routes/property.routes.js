@@ -75,9 +75,9 @@ router.get("/getById/:propertyId/:sellerId", getPropertyById); // always last
 protectedRouter.use(protect);
 router.delete("/deleteProperty/:sellerId/:propertyId",validate({params: propertyIdParamSchema}) , deleteProperty)
 router.post("/create",
-  uploadMultipleMedia("files", 20),
-  enforceMediaSize,
-  // validate({ body: createSchema }),
+  
+  
+  validate({ body: createSchema }),
   createProperty);
 router.put(
   "/update/:propertyId",

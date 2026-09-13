@@ -47,8 +47,8 @@ export const createSchema = Joi.object({
 
 
   price: Joi.number().min(0).required(),
-  askingPrice: Joi.number().min(0).required(),
-  finalPrice: Joi.number().min(0).required(),
+  askingPrice: Joi.number().min(0).allow(null,""),
+  finalPrice: Joi.number().min(0).allow(null,""),
   currency: Joi.string().trim().min(3).max(4),
   quantity: Joi.number().min(0).required(),
 
