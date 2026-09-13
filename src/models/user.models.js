@@ -144,6 +144,44 @@ export const findUserByEmail = async (email) => {
   return rows[0] || null;
 };
 
+export const createOtpForUser = async (userId, otp,) => {
+  const { rows } = await pool.query(
+    `INSERT INTO user_otps (user_id, otp) VALUES ($1, $2) RETURNING *`,
+    [userId, otp]
+  );
+  return rows[0] || null;
+};
+
+export const verifyOtpForUser = async (userId, otp) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM user_otps WHERE user_id = $1 AND otp = $2 LIMIT 1`,
+    [userId, otp]
+  );
+ 
+  const record = rows[0];
+ 
+  if (!record) {
+    return { valid: false, reason: "not_found" };
+  }
+ 
+  const isExpired = new Date(record.expires_at) <= new Date();
+ 
+  if (isExpired) {
+    return { valid: false, reason: "expired", row: record };
+  }
+ 
+  return { valid: true, row: record };
+}
+;
+
+export const findUserByPhoneNumber = async (phoneNumber) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM ${TABLE} WHERE phone_number=$1 LIMIT 1`,
+    [phoneNumber]
+  );
+  return rows[0] || null;
+};
+
 export const findUserById = async (id) => {
   const { rows } = await pool.query(
     `SELECT * FROM ${TABLE} WHERE id=$1 LIMIT 1`,

@@ -1,4 +1,5 @@
 import PurchaseProcessModel from "../models/purchase.process.model.js";
+import PropertyModel from "../models/property.model.js";
 
 const ok = (res, data, message = "Success", meta = undefined, status = 200) =>
   res.status(status).json({
@@ -48,11 +49,52 @@ export const getPurchaseProcessByPropertyId = wrap(async (req, res) => {
 });
 
 export const requestInspection = wrap(async (req, res) => {
+
+  const token = req.headers.authorization?.split(' ')[1];
+    const { user_id, seller_id } = jwt.verify(token, process.env.JWT_SECRET);
+
+   const property = await PropertyModel.findById(req.params.propertyId);
+   const seller = await SellerModel.findById(seller_id);
+   const buyer = await findUserById(user_id);
+  if (!property) {
+    return fail(res, 404, "Property not found", "NOT_FOUND");
+  }
   const process = await PurchaseProcessModel.requestInspection(
     req.params.propertyId,
     getBuyerIdFromBody(req),
     req.body
   );
+  try {
+      await sendNotification({
+  title: "Inspection Requested",
+  body: `You have requested an inspection for ${property.name}.\nThe firm will now be in charge of legal affairs of the property.\nIf you did not make this change, please contact support immediately.`,
+  channels: ["EMAIL", "PUSH"],
+  data: {
+    "property":property
+  },
+  email: buyer.email,
+  jobName: "sendAccountActionEmail",
+  userName: buyer.first_name,
+  userId: user_id,
+});
+
+try {
+      await sendNotification({
+  title: "Property Inspection Requested",
+  body: `A customer have requested an inspection for ${property.name}.\n Do well to schedule for inspection as soon as possible.\n\n If you have further questions, please contact support immediately.`,
+  channels: ["EMAIL", "PUSH"],
+  data: {},
+  email: seller.email,
+  jobName: "sendAccountActionEmail",
+  userName: seller.first_name,
+  userId: seller_id,
+});
+    } catch (error) {
+      logger.error("Failed to send property inspection requested notification:", error.message || error);
+    }
+    } catch (error) {
+      logger.error("Failed to send inspection request notification:", error.message || error);
+    }
 
   return ok(res, process, "Inspection requested successfully");
 });
@@ -78,6 +120,20 @@ export const confirmInspection = wrap(async (req, res) => {
     req.body
   );
 
+  try {
+      await sendNotification({
+  title: "Inspection Confirmed",
+  body: `Your inspection for ${property.name} has been confirmed.\nBelow are the details.\n please contact support immediately.`,
+  channels: ["EMAIL", "PUSH"],
+  data: {},
+  email: seller.email,
+  jobName: "sendAccountActionEmail",
+  userName: seller.first_name,
+  userId: seller_id,
+});
+    } catch (error) {
+      logger.error("Failed to send inspection confirmed notification:", error.message || error);
+    }
   return ok(res, process, "Inspection confirmed successfully");
 });
 

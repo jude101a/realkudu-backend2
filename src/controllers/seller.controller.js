@@ -1,4 +1,6 @@
 import { logger } from "@sentry/node";
+import jwt from "jsonwebtoken";
+import { findUserById } from "../models/user.models.js";
 import SellerModel, {
   SellerStatus,
   SellerType,
@@ -197,6 +199,13 @@ async function createSeller(req, type) {
   const body = req.body || {};
   const { userId, businessName } = body;
 
+  const token = req.headers.authorization?.split(' ')[1];
+  const { id: tokenUserId } = jwt.verify(token, process.env.JWT_SECRET);
+  const user = await findUserById(tokenUserId);
+  if (!user) {
+    return { ok: false, status: 404, message: "User not found", code: "USER_NOT_FOUND" };
+  }
+
   const config = SELLER_FIELD_CONFIG[type];
   if (!config) {
     // Internal guard only — should never be hit via the exported handlers.
@@ -239,6 +248,22 @@ async function createSeller(req, type) {
 
   const payload = config.buildPayload(body);
   const created = await config.register(payload);
+  
+
+  try {
+      await sendNotification({
+  title: "Account Upgrade Successful",
+  body: `You have upgraded your account to a seller tier.\nHurry, start listing your properties!\n\n If you have any questions, please contact support immediately.`,
+  channels: ["EMAIL"],
+  data: {},
+  email: created.rows[0].email,
+  jobName: "sendAccountActionEmail",
+  userName: created.rows[0].first_name,
+  userId: seller_id,
+});
+    } catch (error) {
+      logger.error("Failed to send seller notification:", error.message || error);
+    }
 
   return {
     ok: true,

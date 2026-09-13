@@ -5,6 +5,7 @@ import crypto from "crypto";
 import {
   createUser,
   findUserByEmail,
+  findUserByPhoneNumber,
   findUserById,
   getUserBasicInfoByIdModel,
   getUserFullnameByEmail,
@@ -12,9 +13,11 @@ import {
   updateUser as updateUserModel,
   updateUserById,
   updateUserIsLawyer,
-  verifyUserAccount
+  verifyUserAccount,
+  createOtpForUser,
+  verifyOtpForUser,
 } from "../models/user.models.js";
-  import { notificationQueue } from "../queues/notification.queue.js";
+  import { notificationQueue, emailQueue } from "../queues/notification.queue.js";
 
 import { sendVerificationEmail } from "../utils/email.js";
 import { sendNotification } from "../services/notification.service.js";
@@ -59,8 +62,9 @@ export const register = async (req, res, next) => {
     const requiredFields = [
       "email",
       "password",
-      "firebaseUid",
       "firstName",
+      "phone",
+      "address",
       "lastName",
     ];
 
@@ -82,6 +86,10 @@ export const register = async (req, res, next) => {
     }
 
     const existingUser = await findUserByEmail(email);
+    const existingPhoneUser = await findUserByPhoneNumber(req.body.phone);
+    if (existingPhoneUser) {
+      return sendError(res, 409, "Phone number already in use");
+    }
     if (existingUser) {
       return sendError(res, 409, "User already exists");
     }
@@ -107,18 +115,28 @@ export const register = async (req, res, next) => {
       numberOfChildren: req.body.numberOfChildren ?? 0,
       hobbies: req.body.hobbies || null,
       role: req.body.role || "user",
+      dateOfBirth: req.dateOfBirth,
     };
 
     const user = await createUser(userPayload);
 
-    if (process.env.EMAIL_VERIFICATION_SECRET && process.env.APP_BASE_URL) {
+    if (process.env.EMAIL_VERIFICATION_SECRET && process.env.APP_BASE_URL && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       const token = jwt.sign(
         { id: user.id, email: user.email },
         process.env.EMAIL_VERIFICATION_SECRET,
         { expiresIn: "24h" }
       );
       const verificationLink = `${process.env.APP_BASE_URL}/api/users/verify-email?token=${token}`;
-      await sendVerificationEmail(user.email, verificationLink).catch(() => {});
+      try {
+        await emailQueue.add("sendVerificationEmail", {
+          email: user.email,
+          link: verificationLink,
+        });
+      
+        await sendVerificationEmail(user.email, verificationLink);
+      } catch (error) {
+        console.error("Verification email trigger failed after registration:", error.message || error);
+      }
     }
 
     return sendSuccess(res, 201, { user: sanitizeUser(user) });
@@ -134,7 +152,7 @@ export const verifyEmail = async (req, res, next) => {
       return sendError(res, 400, "Verification token is required");
     }
     if (!process.env.EMAIL_VERIFICATION_SECRET) {
-      return sendError(res, 500, "EMAIL_VERIFICATION_SECRET not configured");
+      return sendError(res, 500, "Not configured");
     }
 
     const decoded = jwt.verify(token, process.env.EMAIL_VERIFICATION_SECRET);
@@ -146,7 +164,7 @@ export const verifyEmail = async (req, res, next) => {
 
     return sendSuccess(res, 200, { message: "Email verified successfully" });
   } catch (_) {
-    return sendError(res, 400, "Invalid or expired verification token");
+    return sendError(res, 400, "Invalid verification token");
   }
 };
 
@@ -159,7 +177,7 @@ export const login = async (req, res, next) => {
 
     const jwtSecret = getJwtSecret();
     if (!jwtSecret) {
-      return sendError(res, 500, "JWT_SECRET is not configured");
+      return sendError(res, 500, "not configured");
     }
 
     const user = await findUserByEmail(normalizeEmail(email));
@@ -458,22 +476,20 @@ export const updateProfile = async (req, res, next) => {
     }
 
     try {
-  await sendNotification({
-  user: {
-    id: id,
-    email: await findUserById(id).then(u => u.email),
-  },
-  title: "Your Profile Was Updated",
-  message: "Your profile has been updated successfully. If you did not make this change, please contact support immediately.",
-  channels: ["EMAIL","IN_APP"],
-  data: {
-  
-  },
-});
-
-} catch (error) {
-  
-}
+      await sendNotification({
+        user: updatedUser.id,
+        title: "Profile Updated",
+        body: "Your profile has been updated successfully.\nIf you did not make this change, please contact support immediately.",
+        channels: ["PUSH", "EMAIL"],
+        data: {},
+        email: updatedUser.email,
+        jobName: "sendAccountActionEmail",
+        userName: updatedUser.first_name,
+        userId: updatedUser.user_id,
+      });
+    } catch (error) {
+      console.error("Failed to send profile update notification:", error.message || error);
+    }
 
     return sendSuccess(res, 200, { user: sanitizeUser(updatedUser) });
   } catch (err) {
@@ -509,22 +525,20 @@ export const changePassword = async (req, res, next) => {
 
 
 try {
-  await sendNotification({
-  user: {
-    id: user.id,
-    email: user.email,
-  },
-  title: "Security Alert",
-  message: "Your password has been changed successfully. If you did not make this change, please contact support immediately.",
-  channels: ["PUSH", "EMAIL", "IN_APP"],
-  data: {
-  
-  },
-});
-
-} catch (error) {
-  
-}
+      await sendNotification({
+        user: user.user_id,
+        title: "Profile Updated",
+        body: "Your has been changed successfully.\nIf you did not make this change, please contact support immediately.",
+        channels: ["EMAIL"],
+        data: {},
+        email: updatedUser.email,
+        jobName: "sendAccountActionEmail",
+        userName: updatedUser.first_name,
+        userId: updatedUser.user_id,
+      });
+    } catch (error) {
+      console.error("Failed to send password change notification:", error.message || error);
+    }
 
     return sendSuccess(res, 200, {
       message: "Password updated successfully",
@@ -533,6 +547,116 @@ try {
     return next(err);
   }
 };
+
+export const resetPasswordRequest = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return sendError(res, 400, "Email is required");
+    }
+
+    const user = await findUserByEmail(normalizeEmail(email));
+    if (!user) {
+      return sendError(res, 404, "User not found");
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
+
+    await createOtpForUser(user.id, otp);
+
+    try {
+      await emailQueue.add("sendPasswordResetEmailRequest", {
+        email: user.email,
+        otp,
+        userName: user.first_name || "User",
+      });
+    } catch (error) {
+      console.error("Failed to send password reset email:", error.message || error);
+    }
+
+    return sendSuccess(res, 200, {
+      message: "Password reset OTP sent to email",
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const verifyOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return sendError(res, 400, "Email and OTP are required");
+    }
+
+    const user = await findUserByEmail(normalizeEmail(email));
+    if (!user) {
+      return sendError(res, 404, "User not found");
+    }
+
+    const isOtpValid = await verifyOtpForUser(user.id, otp);
+    if (!isOtpValid.valid) {
+      return sendError(res, 400, "Invalid or expired OTP");
+    }
+
+    return sendSuccess(res, 200, {
+      message: "OTP verified successfully",
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const resetPassword = async (req, res, next) => {
+  try {
+    const { email,otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return sendError(res, 400, "Email, OTP, and new password are required");
+    }
+
+    if (String(newPassword).length < 6) {
+      return sendError(res, 400, "New password too short");
+    }
+
+    const user = await findUserByEmail(normalizeEmail(email));
+    if (!user) {
+      return sendError(res, 404, "User not found");
+
+    }
+
+    const isOtpValid = await verifyOtpForUser(user.id, otp);
+    if (!isOtpValid.valid) {
+      return sendError(res, 400, "Invalid or expired OTP");
+    }
+
+    const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await updatePasswordModel(user.id, newHash);
+
+    try {
+      await sendNotification({
+        user: user.user_id,
+        title: "Password change",
+        body: "Your password has been changed successfully.\nIf you did not make this change, please contact support immediately.",
+        channels: ["EMAIL"],
+        data: {},
+        email: user.email,
+        jobName: "sendProfileUpdateNotification",
+        userName: user.first_name,
+        userId: user_id,
+      });
+    } catch (error) {
+      logger.error("Failed to send profile update notification:", error.message || error);
+    }
+
+    return sendSuccess(res, 200, {
+      message: "Password reset successfully",
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
 
 export const setLawyerStatus = async (req, res, next) => {
   try {
@@ -550,22 +674,19 @@ export const setLawyerStatus = async (req, res, next) => {
 
 
     try {
-  await sendNotification({
-  user: {
-    id: id,
-    email: await findUserById(id).then(u => u.email),
-  },
-  title: "Status Update Alert",
-  message: "Your lawyer status has been updated successfully.",
-  channels: ["PUSH", "EMAIL", "IN_APP"],
-  data: {
-  
-  },
-});
-
-} catch (error) {
-  
-}
+      await sendNotification({
+        title: "Change of Lawyer Status",
+        body: "Your lawyer status has been updated.\nIf you did not make this change, please contact support immediately.",
+        channels: ["EMAIL"],
+        data: {},
+        email: user.email,
+        jobName: "sendAccountActionEmail",
+        userName: user.first_name,
+        userId: user_id,
+      });
+    } catch (error) {
+      logger.error("Failed to send set lawyer status update notification:", error.message || error);
+    }
 
     return sendSuccess(res, 200, { user: sanitizeUser(updatedUser) });
   } catch (err) {
@@ -585,6 +706,17 @@ export const getUserByEmail = async (req, res, next) => {
     return sendSuccess(res, 200, { user: sanitizeUser(user) });
   } catch (err) {
     return next(err);
+  }
+};
+export const testEmail = async (req, res, next) => {
+  try {
+    await emailQueue.add("sendVerificationEmail", {
+      email: "judemgbeahuruike@gmail.com",
+      verificationUrl: "http://realkudu.com/api/users/verify-email?token=test-token"
+    });
+    return sendSuccess(res, 200, { message: "Test email sent successfully" });
+  } catch (error) {
+    return sendError(res, 500, "Failed to send test email");
   }
 };
 

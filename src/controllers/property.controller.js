@@ -1,5 +1,8 @@
 import PropertyModel from "../models/property.model.js";
 import ImagesModel from "../models/utility.models/images.js";
+import jwt from "jsonwebtoken";
+import SellerModel from "../models/seller.model.js";
+
 import {
   uploadToCloudinary,
   toMediaPayload,
@@ -135,6 +138,9 @@ const respondWithList = (res, result, message) =>
   });
 
 export const createProperty = wrap(async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+    const { user_id, seller_id } = jwt.verify(token, process.env.JWT_SECRET);
+    const seller = await SellerModel.findById(seller_id);
   const payload = stripImmutableFields(req.body || {});
   const missing = REQUIRED_CREATE_FIELDS.filter((field) => payload[field] === undefined);
 
@@ -175,6 +181,21 @@ export const createProperty = wrap(async (req, res) => {
       console.error("error uploading property images", err?.message || err);
     }
   }
+
+  try {
+      await sendNotification({
+  title: "Property created",
+  body: `Your property ${created.name} has been created and is now in the review process.\nIf you did not make this change, please contact support immediately.`,
+  channels: ["EMAIL"],
+  data: {},
+  email: seller.email,
+  jobName: "sendAccountActionEmail",
+  userName: seller.first_name,
+  userId: seller_id,
+});
+    } catch (error) {
+      logger.error("Failed to send set lawyer status update notification:", error.message || error);
+    }
 
   return ok(res, created, "Property created successfully", undefined, 201);
 });

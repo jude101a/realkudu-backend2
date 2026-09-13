@@ -1,5 +1,7 @@
 import HouseModel from "../models/house.model.js";
 import ImagesModel from "../models/utility.models/images.js";
+import SellerModel from "../models/seller.model.js";
+import {findUserById} from "../models/user.models.js";
 import { uploadToCloudinary, toMediaPayload } from "../controllers/utillity.controller/images.controller.js";
 
 const parseBooleanQuery = (value) => {
@@ -32,6 +34,10 @@ const parseBooleanQuery = (value) => {
  *         description: Server error
  */
 export const createHouse = async (req, res) => {
+
+  const token = req.headers.authorization?.split(' ')[1];
+    const { user_id, seller_id } = jwt.verify(token, process.env.JWT_SECRET);
+    const seller = await SellerModel.findById(seller_id);
   try {
     const payload = {
       estateId: req.body.estateId ?? null,
@@ -71,6 +77,23 @@ export const createHouse = async (req, res) => {
       } catch (err) {
         console.error("error uploading house images", err?.message || err);
       }
+    }
+
+    try {
+      await sendNotification({
+        title: "Property creation",
+        body: "${result.title} has been created successfully.\n Let's market this together!!.",
+        channels: ["EMAIL", "PUSH"],
+        data: {
+          "property": result
+        },
+        email: seller.email,
+        jobName: "sendAccountActionEmail",
+        userName: seller.first_name,
+        userId: seller_id,
+      });
+    } catch (error) {
+      logger.error("Failed to send house creation notification:", error.message || error);
     }
 
     res.status(201).json(result);
@@ -398,12 +421,41 @@ export const updateHouseDescription = async (req, res) => {
  *         description: Server error
  */
 export const updateHouseLawyer = async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+    const { user_id, seller_id } = jwt.verify(token, process.env.JWT_SECRET);
+// const lawyer = await LawyerModel.findById(req.body.lawyerId); TODO: Uncomment this line when LawyerModel is available
   try {
     const house = await HouseModel.updateLawyer(
       req.params.id,
       req.body.lawyerId ?? null
     );
     res.json(house);
+    try {
+      await sendNotification({
+  title: "Lawyer Assigned",
+  body: `You have assigned {lawyer.name} as your lawyer in charge of ${house.name}.\nThe firm will now be in charge of legal affairs of the property.\nIf you did not make this change, please contact support immediately.`,
+  channels: ["EMAIL"],
+  data: {},
+  email: seller.email,
+  jobName: "sendAccountActionEmail",
+  userName: seller.first_name,
+  userId: seller_id,
+});
+
+await sendNotification({
+  title: "You have been Assigned",
+  body: `You have been assigned as the lawyer in charge of ${house.name}.\nYour firm will now be in charge of legal affairs of the property.\nHead to your dashboard to view the details.\n You can cancel this assignment at any time.`,
+  channels: ["EMAIL", "PUSH"],
+  data: {},
+  email: lawyer.email,
+  jobName: "sendAccountActionEmail",
+  userName: lawyer.first_name,
+  userId: lawyer_id,
+});
+    } catch (error) {
+      logger.error("Failed to send set lawyer status update notification:", error.message || error);
+    }
+    
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -439,12 +491,42 @@ export const updateHouseLawyer = async (req, res) => {
  *         description: Server error
  */
 export const updateHouseCaretaker = async (req, res) => {
+
+  const token = req.headers.authorization?.split(' ')[1];
+    const { user_id, seller_id } = jwt.verify(token, process.env.JWT_SECRET);
+    const caretaker = await findUserById(req.body.caretakerId);
   try {
     const house = await HouseModel.updateCaretaker(
       req.params.id,
       req.body.caretakerId ?? null
     );
     res.json(house);
+
+    try {
+      await sendNotification({
+        title: "Caretaker Change",
+        body: `You have assigned ${caretaker.first_name} as the caretaker for ${house.name}.\nIf you did not make this change, please contact support immediately.`,
+        channels: ["EMAIL"],
+        data: {},
+        email: seller.email,
+        jobName: "sendAccountActionEmail",
+        userName: seller.first_name,
+        userId: seller_id,
+      });
+
+      await sendNotification({
+  title: "Caretaker Assigned",
+  body: `You have been assigned as the caretaker for ${house.name}.\nIf you did not make this change, please contact support immediately.`,
+  channels: ["EMAIL"],
+  data: {},
+  email: caretaker.email,
+  jobName: "sendAccountActionEmail",
+  userName: caretaker.first_name,
+  userId: caretaker.caretaker_id,
+});
+    } catch (error) {
+      logger.error("Failed to send set caretaker status update notification:", error.message || error);
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -509,9 +591,26 @@ export const updateHouse = async (req, res) => {
  *         description: Server error
  */
 export const deleteHouse = async (req, res) => {
-  try {
+  const token = req.headers.authorization?.split(' ')[1];
+    const { user_id, seller_id } = jwt.verify(token, process.env.JWT_SECRET);
+  if (!user_id || !seller_id) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const seller = await SellerModel.findById(seller_id);
+    try {
     await HouseModel.softDelete(req.params.id);
     res.json({ message: "House deleted successfully" });
+
+    await sendNotification({
+  title: "Property Deletion",
+  body: `You have deleted the property ${house.name}.\nIf you did not make this change, please contact support immediately.`,
+  channels: ["EMAIL"],
+  data: {},
+  email: seller.email,
+  jobName: "sendAccountActionEmail",
+  userName: seller.first_name,
+  userId: seller_id,
+});
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

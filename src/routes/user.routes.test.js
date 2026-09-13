@@ -6,6 +6,17 @@ import { __setInternalPoolForTests } from "../config/db.js";
 process.env.DISABLE_REDIS = "true";
 process.env.JWT_SECRET ||= "test-secret";
 
+test("SMTP transport uses STARTTLS for Gmail on port 587", async () => {
+  process.env.SMTP_HOST = "smtp.gmail.com";
+  process.env.SMTP_PORT = "587";
+
+  const moduleUrl = new URL("../utils/email.js?ts=" + Date.now(), import.meta.url);
+  const { transporter } = await import(moduleUrl.href);
+
+  assert.equal(transporter.options.secure, false);
+  assert.equal(transporter.options.port, 587);
+});
+
 test("register creates a user account", async (t) => {
   // stub DB pool to simulate INSERT returning a new user row
   __setInternalPoolForTests({

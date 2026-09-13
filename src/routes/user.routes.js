@@ -11,11 +11,15 @@ import {
   verifyEmail,
   verifyUser,
   socialLogin,
+  testEmail,
+  resetPassword,
+  verifyOtp,
+  resetPasswordRequest,
 } from "../controllers/user.controller.js";
 
 import { protect } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
-import { getUserNotifications, saveDeviceToken } from "../services/notification.service.js";
+import { getUserNotifications } from "../services/notifications.service.js";
 
 const router = express.Router();
 
@@ -33,12 +37,16 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/social-login", socialLogin);
 router.get("/verify-email", verifyEmail);
+router.post("/send-test-email", testEmail);
+router.post("/verify-otp", verifyOtp);
 
 /* -------------------------------------------------------------------------- */
 /*                               PROFILE                                      */
 /* -------------------------------------------------------------------------- */
 router.put("/:id", protect, updateProfile);
 router.post("/:id/change-password", protect, changePassword);
+router.post("/password-reset", protect, resetPassword);
+router.post("/password-reset-request", protect, resetPasswordRequest);
 router.post("/:id/verify-user", protect, requireRole("user"), verifyUser );
 
 /* -------------------------------------------------------------------------- */

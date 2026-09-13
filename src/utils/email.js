@@ -1,18 +1,18 @@
 import nodemailer from "nodemailer";
-import dns from "dns";
+import { buildEmailVerification, buildResetPasswordEmail, buildAccountActionEmail } from "./email.templates.js";
+
+const SMTP_PORT = Number(process.env.SMTP_PORT);
 
 export const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: true,
+  port: SMTP_PORT,
+  secure: SMTP_PORT === 465, // true only for port 465, false (STARTTLS) for 587
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
-  // Force this specific connection to resolve IPv4 only
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4 }, callback);
-  },
+  family: 4, // forces IPv4 at the socket level — more reliable than a custom dns.lookup override
+  connectionTimeout: 10000, // fail fast (10s) instead of hanging if network is bad
 });
 
 /**
@@ -23,16 +23,49 @@ export const sendVerificationEmail = async (email, link) => {
     from: `"Real Kudu" <${process.env.SMTP_USER}>`,
     to: email,
     subject: "Verify your email",
-    html: `
-      <h2>Welcome 👋</h2>
-      <p>Click the link below to verify your email:</p>
-      <a href="${link}">${link}</a>
-      <p>This link expires in 24 hours.</p>
-    `,
+    html: buildEmailVerificationTemplate({ link, userName }),
   };
 
-  // ✅ THIS IS WHERE IT GOES
-  await transporter.sendMail(mailOptions).catch((err) => {
-    console.error("Mail error:", err);
-  });
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("✅ Email sent:", info.messageId, info.response);
+    return info;
+  } catch (err) {
+    console.error("❌ Mail error:", err.message, err.code, err.responseCode, err.response);
+    throw err;
+  }
+};
+export const sendPasswordResetEmail = async (email, otp, userName) => {
+  const mailOptions = {
+    from: `"Real Kudu" <${process.env.SMTP_USER}>`, 
+    to: email,
+    subject: "Password Reset Request",
+    html: buildPasswordResetEmailTemplate({ otp, userName }),
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("✅ Email sent:", info.messageId, info.response);
+    return info;
+  } catch (err) {
+    console.error("❌ Mail error:", err.message, err.code, err.responseCode, err.response);
+    throw err;
+  }
+};
+
+export const sendAccountActionEmail = async ({email, actionCall, userName, reason, actionLink, deadline }) => {
+  const mailOptions = {
+    from: `"Real Kudu" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: actionCall,
+    html: buildAccountActionEmail({ actionCall, userName, reason, actionLink, deadline }),
+  };
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("✅ Email sent:", info.messageId, info.response);
+    return info;
+  } catch (err) {
+    console.error("❌ Mail error:", err.message, err.code, err.responseCode, err.response);
+    throw err;
+  }
 };

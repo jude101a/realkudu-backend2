@@ -3,6 +3,7 @@ import TransactionRepository from "../repositories/transaction.repositories.js";
 
 import PropertyModel from "../models/property.model.js";
 import { findUserById } from "../models/user.models.js";
+import SellerModel from "../models/seller.model.js";
 
 import { generateReference } from "../utils/reference.js";
 
@@ -389,6 +390,7 @@ class PaymentService {
             gateway
 
         );
+        
 
         throw new Error(
 
@@ -654,6 +656,11 @@ class PaymentService {
     async handleWebhookEvent(event) {
 
     const { event: eventType, data } = event;
+    const seller_id = data?.sellerId;
+    const seller = await SellerModel.findById(seller_id);
+    const buyer = await findUserById(data?.buyerId);
+    const property = await PropertyModel.findById(data?.propertyId);
+    const transaction = await TransactionRepository.findByReference(data?.reference);
 
     info({ event: "WEBHOOK_RECEIVED", type: eventType, reference: data?.reference });
 
@@ -681,15 +688,62 @@ class PaymentService {
                 return;
             }
 
-            await TransactionRepository.markSuccessful(data.reference, data);
+            const successfulTransaction = await TransactionRepository.markSuccessful(data.reference, data);
 
             info({ event: "PAYMENT_SUCCESS_WEBHOOK", reference: data.reference });
 
-            // TODO: trigger post-payment logic here — e.g. create escrow,
-            // notify seller, update property status to sold, etc.
+            const paidTransaction = successfulTransaction ?? transaction;
+            const transactionId = paidTransaction.id ?? paidTransaction.transaction_id;
+            let escrow = transactionId
+                ? await EscrowService.findByTransaction(transactionId)
+                : null;
 
+            if (!escrow) {
+                escrow = await EscrowService.createFromTransaction(paidTransaction);
+            }
+
+            info({
+                event: "ESCROW_CREATED_AFTER_PAYMENT",
+                reference: data.reference,
+                escrowId: escrow?.id,
+            });
+
+
+            await sendNotification({
+        title: "Payment Successful",
+        body: `Your payment for ${property.name} has been received successfully.\n Reference: ${data.reference}, find the details in your transaction history.`,
+        channels: ["EMAIL", "PUSH"],
+        data: {"reference": data.reference,
+             "property": property,
+            "transaction": paidTransaction,
+            "buyer": buyer,
+            "seller": seller,},
+        email: buyer.email,
+        jobName: "sendPaymentEmail",
+        userName: buyer.first_name,
+        userId: buyer.id,
+      });
+
+      await sendNotification({
+        title: "Payment Received",
+        body: `A payment for ${property.name} has been received.\n Reference: ${data.reference},\nThis can be for any stage of the process. Find the details in your transaction history.`,
+        channels: ["EMAIL", "PUSH"],
+        data: {"reference": data.reference,
+             "property": property,
+            "transaction": paidTransaction,
+            "buyer": buyer,
+            "seller": seller,},
+        email: seller.email,
+        jobName: "sendPaymentEmail",
+        userName: seller.first_name,
+        userId: seller.id,
+      });
+      
+      
             break;
         }
+
+        
 
         case "charge.failed": {
 

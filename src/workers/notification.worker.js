@@ -3,6 +3,7 @@ import { getRedisConnectionConfig } from "../config/redis.js";
 import { sendPush } from "../services/push.notification.service.js";
 import { sendEmail } from "../services/email.service.js";
 import { saveNotification } from "../services/notifications.service.js";
+import * as NotificationModel from '../models/notification.model.js';
 
 
 const processJob = async (job) => {
@@ -27,8 +28,19 @@ const processJob = async (job) => {
 			}
 
 			case "PUSH": {
-				const { tokens = [], title, body, data = {}, userId } = payload;
+				let { tokens = [], title, body, data = {}, userId } = payload;
 				console.debug('[notification_worker] PUSH job details', { jobId: job.id, tokenCount: tokens.length, userId });
+
+				if ((!tokens || tokens.length === 0) && userId) {
+					// fetch tokens from DB if userId provided
+					try {
+						const fetched = await NotificationModel.getDeviceTokens(userId);
+						tokens = fetched || [];
+						console.debug('[notification_worker] fetched tokens for user', { jobId: job.id, userId, tokenCount: tokens.length });
+					} catch (err) {
+						console.warn('[notification_worker] failed to fetch tokens for user', { jobId: job.id, userId, error: err?.message || err });
+					}
+				}
 
 				if (tokens.length === 0) {
 					console.warn('[notification_worker] PUSH job without tokens', { jobId: job.id });

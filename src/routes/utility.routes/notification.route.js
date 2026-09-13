@@ -1,10 +1,8 @@
 import express from 'express';
 import { notificationQueue } from '../../queues/notification.queue.js';
-import { getUserNotifications } from '../../services/notification.service.js';
 
 const router = express.Router();
 
-router.get("/get/:userId", getUserNotifications);
 
 router.post('/inquiry', async (req, res) => {
   const { userId, propertyId, buyerId } = req.body;

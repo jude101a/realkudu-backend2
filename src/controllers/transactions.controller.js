@@ -1,4 +1,4 @@
-import TransactionModel from "../models/transactions.model.js";
+import OrderModel from "../models/order.model.js";
 
 class TransactionController {
   async initiate(req, res, next) {
@@ -10,7 +10,7 @@ class TransactionController {
         });
       }
 
-      const transaction = await TransactionModel.createTransaction({
+      const transaction = await OrderModel.createOrder({
   transactionType: req.body.transactionType,
   coverImageUrl: req.body.coverImageUrl,
   title: req.body.title,
@@ -43,7 +43,7 @@ class TransactionController {
   }
   async getTransaction(req, res, next) {
     try {
-      const transaction = await TransactionModel.getTransaction(req.params.id, req.user.id);
+      const transaction = await OrderModel.getOrder(req.params.id, req.user.id);
 
       return res.json({
         success: true,
@@ -56,7 +56,7 @@ class TransactionController {
 
   async listSellerTransactions(req, res, next) {
     try {
-      const transactions = await TransactionModel.getTransactions(req.params.sellerId, {
+      const transactions = await OrderModel.getOrders(req.params.sellerId, {
         page: req.query.page,
         limit: req.query.limit,
       });

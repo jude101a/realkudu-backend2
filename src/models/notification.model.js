@@ -72,11 +72,11 @@ export async function getOneSignalToken(userId) {
 
 export async function saveNotification({ userId, title, body, data = {} }) {
   try {
-    await pool.query(
+    notification = await pool.query(
       `INSERT INTO ${NOTIFICATIONS_TABLE} (user_id, title, body, data) VALUES ($1, $2, $3, $4)`,
       [userId, title, body, data]
     );
-    return true;
+    return notification.rows[0];
   } catch (err) {
     console.error('[notification.model] saveNotification failed', { userId, title, error: err?.message || err });
     throw err;

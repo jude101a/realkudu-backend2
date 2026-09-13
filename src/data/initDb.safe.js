@@ -1,7 +1,7 @@
 import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v6";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v14";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v15";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
@@ -885,7 +885,7 @@ async function createCoreTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      firebase_uid VARCHAR(128) UNIQUE,
+      firebase_uid VARCHAR(128),
       first_name VARCHAR(50) NOT NULL,
       last_name VARCHAR(100) NOT NULL,
       email VARCHAR(255) UNIQUE NOT NULL,
@@ -1065,6 +1065,20 @@ await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_status ON transa
 
   await client.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_onesignal_device_tokens_token ON onesignal_device_tokens(token);
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS user_otps (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL,
+      otp VARCHAR(6) NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '15 minutes'),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_user_otps_user_id ON user_otps(user_id);
   `);
 }
 

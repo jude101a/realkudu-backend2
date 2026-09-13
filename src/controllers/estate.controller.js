@@ -1,5 +1,6 @@
 import EstateModel from "../models/estate.model.js";
 import ImagesModel from "../models/utility.models/images.js";
+import SellerModel from "../models/seller.model.js"
 import { uploadToCloudinary, toMediaPayload } from "./utillity.controller/images.controller.js";
 
 const ok = (res, data, message = "Success", meta = undefined, status = 200) =>
@@ -57,7 +58,9 @@ const listMeta = (result) => ({
 });
 
 export const createEstate = wrap(async (req, res) => {
+  
   const estate = await EstateModel.create(req.body || {});
+  const seller = await SellerModel.findById(estate.seller_id)
 
   // Attach uploaded images if provided
   const files = req.files || (req.file ? [req.file] : []);
@@ -81,6 +84,24 @@ export const createEstate = wrap(async (req, res) => {
       console.error("error uploading estate images", err?.message || err);
     }
   }
+  
+try {
+      await sendNotification({
+        title: "Property Creation",
+        body: "${estate.name} was created successfully.\nHurry and add properties to this estate to start earning from your sales and rentage.\n\n\n please contact support if you need further assistance .",
+        channels: ["EMAIL", "PUSH"],
+        data: {
+          "property": estate
+        },
+        email: seller.email,
+        jobName: "sendAccountActionEmail",
+        userName: seller.first_name,
+        userId: seller.id,
+      });
+    } catch (error) {
+      logger.error("Failed to send estate creation notification:", error.message || error);
+    }
+  
 
   return ok(res, estate, "Estate created successfully", undefined, 201);
 });
@@ -147,6 +168,22 @@ export const updateEstateDetails = wrap(async (req, res) => {
 export const deleteEstate = wrap(async (req, res) => {
   const deleted = await EstateModel.softDelete(req.params.estateId);
   if (!deleted) return fail(res, 404, "Estate not found", "NOT_FOUND");
+  const seller = await SellerModel.findById(deleted.seller_id);
+
+  try {
+      await sendNotification({
+        title: "Property deletion",
+        body: "Your Estate ${estate.name} has been deleted successfully.\n Hurry to aquire or create more estate properties.\n\nThe more you own, the more yo earn!! ",
+        channels: ["EMAIL", "PUSH"],
+        data: {},
+        email: seller.email,
+        jobName: "sendAccountActionEmail",
+        userName: seller.first_name,
+        userId: seller_id,
+      });
+    } catch (error) {
+      logger.error("Failed to send estate deletion notification:", error.message || error);
+    }
   return ok(res, { id: deleted.id }, "Estate deleted successfully");
 });
 

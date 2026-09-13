@@ -1,32 +1,39 @@
-import Redis from 'ioredis';
+import Redis from "ioredis";
 
-// ✅ Connection options (USED BY BullMQ)
 export const redisConnectionOptions = {
   maxRetriesPerRequest: null,
-  enableReadyCheck: false,
+
+  enableReadyCheck: true,
+
   retryStrategy: (times) => {
-    if (times > 5) return null;
-    return Math.min(times * 100, 2000);
+    return Math.min(times * 500, 5000);
   },
 };
 
 export const getRedisUrl = () => {
-  if (process.env.DISABLE_REDIS === 'true') {
+  if (process.env.DISABLE_REDIS === "true") {
     return null;
   }
 
-  const isLocal = process.env.NODE_ENV !== 'production';
+  const isProduction =
+    process.env.NODE_ENV === "production";
 
-  if (isLocal) {
-    return process.env.REDIS_URL_LOCAL || 'redis://localhost:6379';
+  if (!isProduction) {
+    return (
+      process.env.REDIS_URL_LOCAL ||
+      "redis://localhost:6379"
+    );
   }
 
-  return process.env.REDIS_URL || 'redis://localhost:6379';
+  return process.env.REDIS_URL || null;
 };
 
 export const getRedisConnectionConfig = () => {
   const url = getRedisUrl();
-  if (!url) return null;
+
+  if (!url) {
+    return null;
+  }
 
   return {
     url,
@@ -35,6 +42,7 @@ export const getRedisConnectionConfig = () => {
 };
 
 let redis = null;
+
 const redisUrl = getRedisUrl();
 
 if (redisUrl) {
@@ -44,24 +52,47 @@ if (redisUrl) {
     connectTimeout: 5000,
   });
 
-  redis.on('connect', () => {
-    console.log('✅ Redis connected');
+  redis.on("connect", () => {
+    console.log("🔌 Redis connecting...");
   });
 
-  redis.on('error', (err) => {
-    const message = err?.message || String(err);
-    if (message.includes('ENOTFOUND') || message.includes('ECONNREFUSED')) {
-      console.warn('⚠️ Redis not available; continuing without Redis for this session.');
+  redis.on("ready", () => {
+    console.log("✅ Redis ready");
+  });
+
+  redis.on("reconnecting", (delay) => {
+    console.warn(
+      `🔄 Redis reconnecting in ${delay}ms...`
+    );
+  });
+
+  redis.on("close", () => {
+    console.warn("⚠️ Redis connection closed");
+  });
+
+  redis.on("error", (err) => {
+    const message =
+      err?.message || String(err);
+
+    if (
+      message.includes("ENOTFOUND") ||
+      message.includes("ECONNREFUSED") ||
+      message.includes("ETIMEDOUT")
+    ) {
+      console.warn(
+        `⚠️ Redis temporarily unavailable: ${message}`
+      );
+
       return;
     }
-    console.error('❌ Redis error:', message);
-  });
 
-  redis.on('ready', () => {
-    console.log('✅ Redis ready');
+    console.error(
+      "❌ Redis error:",
+      message
+    );
   });
 } else {
-  console.warn('⚠️ Redis disabled locally (DISABLE_REDIS=true)');
+  console.warn("⚠️ Redis disabled.");
 }
 
 export default redis;
