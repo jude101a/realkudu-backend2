@@ -25,7 +25,7 @@ export const createSchema = Joi.object({
   sellerId: uuid.required(),
   houseName: Joi.string().trim(),
   unitNumber: Joi.string().trim(),
-  propertType: Joi.object(),
+  propertyType: Joi.object(),
   name: Joi.string().trim().min(2).max(500).required(),
   address: Joi.string().trim().min(3).max(2000).required(),
   lga: Joi.string().trim().min(2).max(255).required(),
