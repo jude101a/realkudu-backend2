@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import { sendNotification } from "../services/notification.service.js";
 
 import {findUserById} from "../models/user.models.js";
-import { uploadToCloudinary, toMediaPayload } from "../controllers/utillity.controller/images.controller.js";
+import { toMediaPayload } from "../controllers/utillity.controller/images.controller.js";
 
 const parseBooleanQuery = (value) => {
   if (value === undefined || value === null || value === "") return undefined;

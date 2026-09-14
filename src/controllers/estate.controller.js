@@ -2,7 +2,7 @@ import EstateModel from "../models/estate.model.js";
 import ImagesModel from "../models/utility.models/images.js";
 import SellerModel from "../models/seller.model.js";
 import { sendNotification } from "../services/notification.service.js";
-import { uploadToCloudinary, toMediaPayload } from "./utillity.controller/images.controller.js";
+import { toMediaPayload } from "./utillity.controller/images.controller.js";
 
 const ok = (res, data, message = "Success", meta = undefined, status = 200) =>
   res.status(status).json({

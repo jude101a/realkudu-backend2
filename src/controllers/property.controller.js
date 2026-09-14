@@ -5,7 +5,7 @@ import SellerModel from "../models/seller.model.js";
 import { sendNotification } from "../services/notification.service.js";
 import { logger } from "@sentry/node";
 import {
-  uploadToCloudinary,
+
   toMediaPayload,
 } from "../controllers/utillity.controller/images.controller.js";
 
