@@ -1,9 +1,6 @@
 import ImagesModel from "../../models/utility.models/images.js";
 import { v2 as cloudinary } from "cloudinary";
 
-const CLOUDINARY_UPLOAD_FOLDER =
-  process.env.CLOUDINARY_UPLOAD_FOLDER || "real-kudu/properties";
-
 const mapCloudinaryError = (error) => ({
   message: error?.message,
   httpCode: error?.http_code,
@@ -28,16 +25,8 @@ const wrap = (handler) => async (req, res) => {
   try {
     await handler(req, res);
   } catch (error) {
-    if (error?.code === "LIMIT_FILE_SIZE") {
-      return fail(res, 413, error.message || "Uploaded file is too large", "FILE_TOO_LARGE");
-    }
-
-    if (error?.code === "INVALID_FILE_TYPE" || error?.code === "NO_FILE") {
+    if (error?.code === "NO_IMAGES" || error?.code === "VALIDATION_ERROR") {
       return fail(res, 400, error.message, error.code);
-    }
-
-    if (error?.code === "CLOUDINARY_UPLOAD_ERROR") {
-      return fail(res, 502, "Cloudinary upload failed", error.code, error.details);
     }
 
     if (error?.code === "CLOUDINARY_DELETE_ERROR") {
@@ -83,34 +72,8 @@ const assertCloudinaryConfigured = () => {
   }
 };
 
-const uploadToCloudinary = async (file) => {
-  assertCloudinaryConfigured();
-
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: CLOUDINARY_UPLOAD_FOLDER,
-        resource_type: "auto",
-        use_filename: true,
-        unique_filename: true,
-      },
-      (error, result) => {
-        if (error) {
-          const uploadError = new Error(error.message || "Cloudinary upload failed");
-          uploadError.code = "CLOUDINARY_UPLOAD_ERROR";
-          uploadError.details = mapCloudinaryError(error);
-          reject(uploadError);
-          return;
-        }
-
-        resolve(result);
-      }
-    );
-
-    stream.end(file.buffer);
-  });
-};
-
+// Deletion from Cloudinary is still a legitimate backend responsibility
+// (the client shouldn't hold delete-capable credentials), so this stays.
 const deleteFromCloudinary = async ({ publicId, resourceType = "image" }) => {
   if (!publicId) return null;
   assertCloudinaryConfigured();
@@ -138,81 +101,77 @@ const deleteFromCloudinary = async ({ publicId, resourceType = "image" }) => {
   }
 };
 
-const toMediaPayload = ({ propertyId, isCover, file, upload }) => ({
+/**
+ * Builds the DB payload for one image entry from client-supplied data.
+ * The client uploads directly to Cloudinary and sends back whatever
+ * metadata it has — only imageUrl is guaranteed; everything else is
+ * optional and defaults to null if the client doesn't send it.
+ */
+const toMediaPayload = ({ propertyId, isCover, image }) => ({
   propertyId,
-  imageUrl: upload.secure_url,
-  publicId: upload.public_id,
-  filename: upload.original_filename || file.originalname,
-  originalFilename: file.originalname,
-  mimeType: file.mimetype,
-  resourceType: upload.resource_type,
-  size: file.size,
-  format: upload.format,
-  width: upload.width ?? null,
-  height: upload.height ?? null,
-  duration: upload.duration ?? null,
+  imageUrl: image.imageUrl,
+  publicId: image.publicId ?? null,
+  filename: image.filename ?? null,
+  mimeType: image.mimeType ?? null,
+  resourceType: image.resourceType ?? "image",
+  size: image.size ?? null,
+  format: image.format ?? null,
+  width: image.width ?? null,
+  height: image.height ?? null,
+  duration: image.duration ?? null,
   isCover,
 });
 
 export const insertPropertyImage = wrap(async (req, res) => {
-  if (!req.file) {
-    const error = new Error("A media file is required");
-    error.code = "NO_FILE";
+  const { propertyId, imageUrl } = req.body || {};
+
+  if (!imageUrl) {
+    const error = new Error("imageUrl is required");
+    error.code = "VALIDATION_ERROR";
+    throw error;
+  }
+  if (!propertyId) {
+    const error = new Error("propertyId is required");
+    error.code = "VALIDATION_ERROR";
     throw error;
   }
 
-  const upload = await uploadToCloudinary(req.file);
   const created = await ImagesModel.insertImage(
     toMediaPayload({
-      propertyId: req.body.propertyId,
+      propertyId,
       isCover: req.body.isCover === true || req.body.isCover === "true",
-      file: req.file,
-      upload,
+      image: req.body,
     })
   );
 
-  return ok(res, created, "Media uploaded successfully", undefined, 201);
+  return ok(res, created, "Media registered successfully", undefined, 201);
 });
 
 export const insertMultipleImages = wrap(async (req, res) => {
-  const files = req.files || [];
+  const { propertyId } = req.body || {};
+  const bodyImages = Array.isArray(req.body?.images) ? req.body.images : [];
 
-  if (!files.length) {
-    const error = new Error("At least one media file is required");
-    error.code = "NO_FILE";
+  if (!propertyId) {
+    const error = new Error("propertyId is required");
+    error.code = "VALIDATION_ERROR";
+    throw error;
+  }
+  if (!bodyImages.length) {
+    const error = new Error("At least one image is required");
+    error.code = "NO_IMAGES";
     throw error;
   }
 
-  const uploads = [];
-
-  try {
-    for (const file of files) {
-      uploads.push(await uploadToCloudinary(file));
-    }
-  } catch (error) {
-    await Promise.allSettled(
-      uploads.map((upload) =>
-        deleteFromCloudinary({
-          publicId: upload.public_id,
-          resourceType: upload.resource_type,
-        })
-      )
-    );
-    throw error;
-  }
-
-  const isCoverIndex = Number(req.body.coverIndex);
-  const images = uploads.map((upload, index) =>
+  const images = bodyImages.map((image, index) =>
     toMediaPayload({
-      propertyId: req.body.propertyId,
-      isCover: Number.isInteger(isCoverIndex) && isCoverIndex === index,
-      file: files[index],
-      upload,
+      propertyId,
+      isCover: Boolean(image.isCover),
+      image,
     })
   );
 
-  const created = await ImagesModel.insertMultipleImages(req.body.propertyId, images);
-  return ok(res, created, "Media uploaded successfully", undefined, 201);
+  const created = await ImagesModel.insertMultipleImages(propertyId, images);
+  return ok(res, created, "Media registered successfully", undefined, 201);
 });
 
 export const getPropertyImage = wrap(async (req, res) => {
@@ -277,4 +236,4 @@ export const bulkDeletePropertyImages = wrap(async (req, res) => {
 });
 
 // Export helpers for reuse in other controllers
-export { uploadToCloudinary, toMediaPayload, deleteFromCloudinary };
+export { toMediaPayload, deleteFromCloudinary };

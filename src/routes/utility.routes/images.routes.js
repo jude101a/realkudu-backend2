@@ -137,16 +137,14 @@ protectedRouter.use(protect);
 
 protectedRouter.post(
   "/createImages",
-  uploadSingleMedia("file"),
-  enforceMediaSize,
+  
   validate({ body: createImageSchema }),
   insertPropertyImage
 );
 
 protectedRouter.post(
   "/bulk/insertMultipleImages",
-  uploadMultipleMedia("files", 20),
-  enforceMediaSize,
+  
   validate({ body: createMultipleImagesSchema }),
   insertMultipleImages
 );
@@ -170,6 +168,7 @@ protectedRouter.delete(
   "/bulk/deleteMultiplePropertyImages",
   validate({ body: bulkPropertyIdsBodySchema }),
   bulkDeletePropertyImages
+
 );
 protectedRouter.delete(
   "/bulk/delete-by-property-ids",
