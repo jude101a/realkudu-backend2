@@ -1,6 +1,7 @@
 import EstateModel from "../models/estate.model.js";
 import ImagesModel from "../models/utility.models/images.js";
-import SellerModel from "../models/seller.model.js"
+import SellerModel from "../models/seller.model.js";
+import { sendNotification } from "../services/notification.service.js";
 import { uploadToCloudinary, toMediaPayload } from "./utillity.controller/images.controller.js";
 
 const ok = (res, data, message = "Success", meta = undefined, status = 200) =>
@@ -62,33 +63,12 @@ export const createEstate = wrap(async (req, res) => {
   const estate = await EstateModel.create(req.body || {});
   const seller = await SellerModel.findById(estate.seller_id)
 
-  // Attach uploaded images if provided
-  const files = req.files || (req.file ? [req.file] : []);
-  if (files.length) {
-    const uploads = [];
-    try {
-      for (const file of files) uploads.push(await uploadToCloudinary(file));
-
-      const coverIndex = Number(req.body.coverIndex);
-      const images = uploads.map((upload, index) =>
-        toMediaPayload({
-          propertyId: estate.estate_id,
-          isCover: Number.isInteger(coverIndex) && coverIndex === index,
-          file: files[index],
-          upload,
-        })
-      );
-
-      await ImagesModel.insertMultipleImages(estate.estate_id, images);
-    } catch (err) {
-      console.error("error uploading estate images", err?.message || err);
-    }
-  }
+  
   
 try {
       await sendNotification({
-        title: "Property Creation",
-        body: "${estate.name} was created successfully.\nHurry and add properties to this estate to start earning from your sales and rentage.\n\n\n please contact support if you need further assistance .",
+        title: "Estate Creation",
+        body: `${estate.name} was created successfully.\nHurry and add properties to this estate to start earning from your sales and rentage.\n\n\n please contact support if you need further assistance .`,
         channels: ["EMAIL", "PUSH"],
         data: {
           "property": estate
@@ -172,8 +152,8 @@ export const deleteEstate = wrap(async (req, res) => {
 
   try {
       await sendNotification({
-        title: "Property deletion",
-        body: "Your Estate ${estate.name} has been deleted successfully.\n Hurry to aquire or create more estate properties.\n\nThe more you own, the more yo earn!! ",
+        title: "Estate deletion",
+        body: `Your Estate ${estate.name} has been deleted successfully.\n Hurry to aquire or create more estate properties.\n\nThe more you own, the more yo earn!! `,
         channels: ["EMAIL", "PUSH"],
         data: {},
         email: seller.email,
