@@ -1,6 +1,9 @@
 import HouseModel from "../models/house.model.js";
 import ImagesModel from "../models/utility.models/images.js";
 import SellerModel from "../models/seller.model.js";
+import jwt from "jsonwebtoken";
+import { sendNotification } from "../services/notification.service.js";
+
 import {findUserById} from "../models/user.models.js";
 import { uploadToCloudinary, toMediaPayload } from "../controllers/utillity.controller/images.controller.js";
 
@@ -36,8 +39,8 @@ const parseBooleanQuery = (value) => {
 export const createHouse = async (req, res) => {
 
   const token = req.headers.authorization?.split(' ')[1];
-    const { user_id, seller_id } = jwt.verify(token, process.env.JWT_SECRET);
-    const seller = await SellerModel.findById(seller_id);
+    const user_id = jwt.verify(token, process.env.JWT_SECRET);
+    const seller = await SellerModel.findByUserId(user_id);
   try {
     const payload = {
       estateId: req.body.estateId ?? null,
@@ -57,11 +60,9 @@ export const createHouse = async (req, res) => {
     // Attach uploaded images if provided
     const files = req.files || (req.file ? [req.file] : []);
     if (files.length) {
-      const uploads = [];
+      const uploads = req.images;
       try {
-        for (const file of files) {
-          uploads.push(await uploadToCloudinary(file));
-        }
+        
 
         const coverIndex = Number(req.body.coverIndex);
         const images = uploads.map((upload, index) =>
@@ -90,7 +91,7 @@ export const createHouse = async (req, res) => {
         email: seller.email,
         jobName: "sendAccountActionEmail",
         userName: seller.first_name,
-        userId: seller_id,
+        userId: seller.sellerId,
       });
     } catch (error) {
       logger.error("Failed to send house creation notification:", error.message || error);
