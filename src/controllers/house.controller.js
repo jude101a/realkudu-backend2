@@ -39,7 +39,7 @@ const parseBooleanQuery = (value) => {
 export const createHouse = async (req, res) => {
 
   const token = req.headers.authorization?.split(' ')[1];
-    const user_id = jwt.verify(token, process.env.JWT_SECRET);
+    const {user_id} = jwt.verify(token, process.env.JWT_SECRET);
     const seller = await SellerModel.findByUserId(user_id);
   try {
     const payload = {

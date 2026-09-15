@@ -32,7 +32,6 @@ import {
   updateHouseLawyerSchema,
   updateHouseSchema,
 } from "../validators/house.validator.js";
-import { uploadMultipleMedia, enforceMediaSize } from "./utility.routes/images.routes.js";
 
 const router = Router();
 const protectedRouter = Router();
@@ -60,8 +59,6 @@ protectedRouter.put(
 protectedRouter.post(
   "/",
   protect,
-  uploadMultipleMedia("files", 20),
-  enforceMediaSize,
   validate({ body: createHouseSchema }),
   createHouse
 );
@@ -69,8 +66,6 @@ protectedRouter.post(
 protectedRouter.post(
   "/createHouse",
   protect,
-  uploadMultipleMedia("files", 20),
-  enforceMediaSize,
   validate({ body: createHouseSchema }),
   createHouse
 );
