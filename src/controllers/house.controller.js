@@ -43,18 +43,18 @@ export const createHouse = async (req, res) => {
     const seller = await SellerModel.findByUserId(user_id);
   try {
     const payload = {
-      estateId: req.body.estateId ?? null,
-      lawyerId: req.body.lawyerId || null,
-      caretakerId: req.body.caretakerId || null,
-      name: req.body.name,
-      type: req.body.type,
-      address: req.body.address,
-      coverImageUrl: req.body.coverImageUrl ?? null,
-      isSingleHouse: req.body.isSingleHouse === true,
-      state: req.body.state,
-      lga: req.body.lga,
-    };
-
+  sellerId: seller.seller_id, // add this
+  estateId: req.body.estateId ?? null,
+  lawyerId: req.body.lawyerId || null,
+  caretakerId: req.body.caretakerId || null,
+  name: req.body.name,
+  type: req.body.type,
+  address: req.body.address,
+  coverImageUrl: req.body.coverImageUrl ?? null,
+  isSingleHouse: req.body.isSingleHouse === true,
+  state: req.body.state,
+  lga: req.body.lga,
+};
     const result = await HouseModel.create(payload);
 
     // Attach uploaded images if provided
@@ -91,7 +91,7 @@ export const createHouse = async (req, res) => {
         email: seller.email,
         jobName: "sendAccountActionEmail",
         userName: seller.first_name,
-        userId: seller.sellerId,
+        userId: seller.seller_id,
       });
     } catch (error) {
       logger.error("Failed to send house creation notification:", error.message || error);
