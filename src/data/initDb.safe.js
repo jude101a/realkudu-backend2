@@ -1,7 +1,8 @@
 import pool from "../config/db.js";
 
-const MIGRATION_NAME = "bootstrap_schema_v6";
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v15";
+const MIGRATION_NAME = "bootstrap_schema_v7";
+// Bump checksum after schema adjustments so migration runs again when applied
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v16";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
@@ -1513,6 +1514,7 @@ async function createFinanceAndOpsTables(client) {
     );
   `);
 
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS property_orders (
       order_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -1521,6 +1523,7 @@ async function createFinanceAndOpsTables(client) {
       agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
       lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
       property_id UUID NOT NULL,
+      quantity NUMERIC(12,2) DEFAULT 0 CHECK (quantity >= 0),
       property_type VARCHAR(50) NOT NULL,
       status VARCHAR(30) NOT NULL,
       payment_type VARCHAR(30) NOT NULL,
@@ -1534,12 +1537,28 @@ async function createFinanceAndOpsTables(client) {
       agreement_signed BOOLEAN DEFAULT FALSE,
       government_consent_required BOOLEAN DEFAULT TRUE,
       notes TEXT,
+      purchase_step VARCHAR(100),
+      funnel_step VARCHAR(100),
+      version INTEGER DEFAULT 0,
+      docs_verified BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       completed_at TIMESTAMPTZ,
-      cancelled_at TIMESTAMPTZ
+      cancelled_at TIMESTAMPTZ,
+      deleted_at TIMESTAMPTZ
     );
   `);
+
+  // Ensure new columns that model code expects exist on older DBs.
+  async function ensurePropertyOrdersColumns(client) {
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS purchase_step VARCHAR(100)`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS funnel_step VARCHAR(100)`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 0`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS docs_verified BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+  }
+
+  await runStep(client, 'property_orders_columns', () => ensurePropertyOrdersColumns(client));
 
   await createPurchaseProcessTables(client);
   await ensurePurchaseProcessBuyerForeignKeys(client);

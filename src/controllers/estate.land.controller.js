@@ -2,9 +2,10 @@
 import {
   getDashboard,
   findByIdForSeller,
-  getSellerIdByUserId,
   updateStatusForSeller,
-} from '../models/estateTransaction.model.js';
+} from '../models/estate.land.model.js';
+import jwt from 'jsonwebtoken';
+import SellerModel  from '../models/seller.model.js';
 
 const STATUSES = new Set(['pending', 'approved', 'completed', 'declined']);
 
@@ -69,7 +70,9 @@ function parseDashboardQuery(query) {
 }
 
 function requireUserId(req) {
-  const userId = req.user?.id ?? req.user?.userId ?? req.auth?.userId;
+  const jwtToken = req.headers.authorization?.split(' ')[1];
+  const id = jwt.decode(jwtToken)?.id;
+  const userId = id ;
   if (!userId) {
     const error = new Error('Authentication required');
     error.statusCode = 401;
@@ -79,10 +82,13 @@ function requireUserId(req) {
 }
 
 async function resolveSeller(req) {
-  const userId = requireUserId(req);
-  const sellerId = await getSellerIdByUserId(userId);
+  const jwtToken = req.headers.authorization?.split(' ')[1];
+  const id = jwt.decode(jwtToken)?.id;
+  const userId = id ;
+  const sellerResult = await SellerModel.findByUserId(userId);
+  const seller = sellerResult.rows[0];
 
-  if (!sellerId) {
+  if (!seller) {
     const error = new Error('Seller account not found');
     error.statusCode = 403;
     throw error;
@@ -127,7 +133,24 @@ function sendError(res, error) {
 
 export async function getEstateTransactionDashboard(req, res) {
   try {
-    const sellerId = await resolveSeller(req);
+    const jwtToken = req.headers.authorization?.split(' ')[1];
+    const id = jwt.decode(jwtToken)?.id;
+    const userId = id ;
+const sellerResult = await SellerModel.findByUserId(userId);
+const seller = sellerResult.rows[0];
+
+if (!seller) {
+  const error = new Error('Seller account not found');
+  error.statusCode = 403;
+  throw error;
+}
+
+const sellerId = seller.id;
+
+console.log('Resolved sellerId:', {
+  userId,
+  sellerId,
+});    console.log('Resolved sellerId:', { userId: req.user?.id, sellerId });
     const estateId = parseUuid(req.params.estateId, 'estateId');
     const propertyId = req.query.propertyId
       ? parseUuid(req.query.propertyId, 'propertyId')

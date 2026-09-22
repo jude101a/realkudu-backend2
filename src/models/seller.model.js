@@ -57,14 +57,14 @@ class SellerModel {
   }
 
   static async createIndividualSeller(data, client = null) {
-    return this.#createSeller({ ...data, cacNumber: null }, client);
+    return this.createSeller({ ...data, cacNumber: null }, client);
   }
 
   static async createCompanySeller(data, client = null) {
-    return this.#createSeller(data, client);
+    return this.createSeller(data, client);
   }
 
-  static async #createSeller(data, client = null) {
+  static async createSeller(data, client = null) {
     const query = `
       INSERT INTO ${TABLE} (
         user_id,

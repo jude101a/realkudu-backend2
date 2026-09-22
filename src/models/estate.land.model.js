@@ -1,7 +1,7 @@
 
 
 // backend/models/estateTransaction.model.js
-import { pool } from '../config/db.js';
+import  pool  from '../config/db.js';
 
 /**
  * All seller authorization is enforced here as well as in the controller.
@@ -21,10 +21,12 @@ function addFilter(where, params, sql, value) {
 }
 
 function buildFilters({ sellerId, estateId, propertyId, status, agentId, q, from, to }, params) {
+  // filter against property_orders (alias et) and the linked property (alias e)
   const where = ['et.deleted_at IS NULL'];
 
   addFilter(where, params, 'et.seller_id = $X', sellerId);
-  addFilter(where, params, 'et.estate_id = $X', estateId);
+  // estateId lives on the property table (e.estate_id)
+  addFilter(where, params, 'e.estate_id = $X', estateId);
 
   if (propertyId) addFilter(where, params, 'et.property_id = $X', propertyId);
   if (status) addFilter(where, params, 'et.status = $X', status);
@@ -47,8 +49,8 @@ function buildFilters({ sellerId, estateId, propertyId, status, agentId, q, from
 
 function baseSelect() {
   return `
-    FROM orders et
-    JOIN property e ON e.property_id = et.estate_id
+    FROM property_orders et
+    JOIN property e ON e.property_id = et.property_id
     LEFT JOIN users buyer ON buyer.id = et.buyer_id
     LEFT JOIN sellers agent ON agent.id = et.agent_id
   `;
@@ -56,16 +58,21 @@ function baseSelect() {
 
 function buyerNameSql() {
   return `COALESCE(
-    NULLIF(TRIM(CONCAT_WS(' ', buyer.first_name, buyer.last_name)), ''),
-    buyer.name,
+    NULLIF(
+      TRIM(CONCAT_WS(' ', buyer.first_name, buyer.last_name)),
+      ''
+    ),
     'Buyer'
   )`;
 }
 
 function agentNameSql() {
   return `COALESCE(
-    NULLIF(TRIM(CONCAT_WS(' ', agent.first_name, agent.last_name)), ''),
-    agent.name,
+    NULLIF(
+      TRIM(CONCAT_WS(' ', agent.business_name)),
+      ''
+    ),
+    agent.business_name,
     'Unassigned'
   )`;
 }
@@ -107,8 +114,8 @@ export async function getDashboard(params) {
        COUNT(*) FILTER (WHERE et.status = 'approved')::int AS approved,
        COUNT(*) FILTER (WHERE et.status = 'completed')::int AS completed,
        COUNT(*) FILTER (WHERE et.status = 'declined')::int AS declined,
-       COALESCE(SUM(et.amount) FILTER (WHERE et.status = 'completed'), 0)::numeric AS total_revenue,
-       COALESCE(SUM(et.amount) FILTER (WHERE et.status IN ('pending','approved')), 0)::numeric AS expected_revenue,
+       COALESCE(SUM(et.agreed_amount) FILTER (WHERE et.status = 'completed'), 0)::numeric AS total_revenue,
+       COALESCE(SUM(et.agreed_amount) FILTER (WHERE et.status IN ('pending','approved')), 0)::numeric AS expected_revenue,
        COALESCE(SUM(et.booking_fee) FILTER (WHERE et.status <> 'declined'), 0)::numeric AS booking_fees
      ${baseSelect()}
      WHERE ${whereSql}`,
@@ -117,8 +124,7 @@ export async function getDashboard(params) {
 
   const transactionsResult = await pool.query(
     `SELECT
-       et.id,
-       et.estate_id,
+       et.order_id AS id,
        e.name AS estate_name,
        et.property_id,
        et.buyer_id,
@@ -126,14 +132,13 @@ export async function getDashboard(params) {
        et.agent_id,
        ${agentNameSql()} AS agent_name,
        et.funnel_step,
-       et.amount::numeric AS amount,
+       et.agreed_amount::numeric AS amount,
        et.booking_fee::numeric AS booking_fee,
        et.status,
-       et.quantity AS plot,
+       e.quantity AS plot,
        et.docs_verified,
        et.created_at,
-       et.updated_at,
-       et.version
+       et.updated_at
      ${baseSelect()}
      WHERE ${whereSql}
      ORDER BY ${SORT_COLUMNS[sort] ?? SORT_COLUMNS.newest}
@@ -157,7 +162,7 @@ export async function getDashboard(params) {
        et.agent_id,
        ${agentNameSql()} AS agent_name,
        COUNT(*) FILTER (WHERE et.status = 'completed')::int AS sales,
-       COALESCE(SUM(et.amount), 0)::numeric AS revenue
+       COALESCE(SUM(et.agreed_amount), 0)::numeric AS revenue
      ${baseSelect()}
      WHERE ${whereSql}
      GROUP BY et.agent_id, ${agentNameSql()}
@@ -174,8 +179,8 @@ export async function getDashboard(params) {
        COUNT(*) FILTER (WHERE p.status = 'sold')::int AS sold,
        COUNT(*) FILTER (WHERE p.status = 'blocked')::int AS blocked,
        COUNT(*)::int AS total
-     FROM estate_plots p
-     WHERE p.estate_id = $1
+     FROM property_orders p
+     WHERE p.property_id = $1
        AND p.deleted_at IS NULL`,
     [estateId],
   );
@@ -222,7 +227,6 @@ export async function getDashboard(params) {
     },
     transactions: transactionsResult.rows.map((r) => ({
       id: r.id,
-      estateId: r.estate_id,
       estateName: r.estate_name,
       propertyId: r.property_id,
       buyerId: r.buyer_id,
@@ -237,7 +241,6 @@ export async function getDashboard(params) {
       docsVerified: r.docs_verified,
       date: r.created_at,
       updatedAt: r.updated_at,
-      version: r.version,
     })),
   };
 }
@@ -245,8 +248,8 @@ export async function getDashboard(params) {
 export async function findByIdForSeller({ transactionId, sellerId, estateId }) {
   const result = await pool.query(
     `SELECT
-       et.id,
-       et.estate_id,
+       et.order_id AS id,
+       e.estate_id AS estate_id,
        e.name AS estate_name,
        et.property_id,
        et.buyer_id,
@@ -254,18 +257,18 @@ export async function findByIdForSeller({ transactionId, sellerId, estateId }) {
        et.agent_id,
        ${agentNameSql()} AS agent_name,
        et.funnel_step,
-       et.amount::numeric AS amount,
+       et.agreed_amount::numeric AS amount,
        et.booking_fee::numeric AS booking_fee,
        et.status,
-       et.name AS plot,
+       NULLIF(et.name, '') AS plot,
        et.docs_verified,
        et.created_at,
        et.updated_at,
        et.version
      ${baseSelect()}
-     WHERE et.id = $1
+     WHERE et.order_id = $1
        AND et.seller_id = $2
-       AND et.estate_id = $3
+       AND e.estate_id = $3
        AND et.deleted_at IS NULL
      LIMIT 1`,
     [transactionId, sellerId, estateId],

@@ -24,7 +24,7 @@
     "crypto": "^1.0.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.5.2",
+    "express-rate-limit": "^8.7.0",
     "firebase-admin": "^13.8.0",
     "helmet": "^8.2.0",
     "ioredis": "^5.10.1",
@@ -36,6 +36,7 @@
     "pdfkit": "^0.19.1",
     "pg": "^8.18.0",
     "pkg": "^5.8.1",
+    "rate-limit-redis": "^6.0.1",
     "socket.io": "^4.8.3",
     "uuid": "^13.0.2",
     "winston": "^3.19.0"

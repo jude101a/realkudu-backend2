@@ -13,22 +13,22 @@ const router = Router();
 
 // Authentication + seller authorization happen before the controller.
 // Never accept sellerId from the URL/body for authorization.
-router.use(protect, requireRole('seller'));
+router.use(protect, requireRole('user'));
 
 router.get(
-  '/estates/:estateId/transactions/dashboard',
+  '/land-estate/:estateId/dashboard',
   dashboardReadLimiter,
   getEstateTransactionDashboard,
 );
 
 router.get(
-  '/estates/:estateId/transactions/:transactionId',
+  '/land-estate/:estateId/transactions/:transactionId',
   dashboardReadLimiter,
   getEstateTransactionById,
 );
 
 router.patch(
-  '/estates/:estateId/transactions/:transactionId/status',
+  '/land-estate/:estateId/transactions/:transactionId/status',
   transactionWriteLimiter,
   updateEstateTransactionStatus,
 );

@@ -40,7 +40,7 @@ router.use("/transfers", transferRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/tenants", tenantRoutes);
 router.use("/transactions", transactionRoutes); // Assuming transferRoutes handles transactions as well
-router.use("/land-estate", landEstateTransactionsRoutes); // Assuming you have a separate route for estate transactions
+router.use("/land", landEstateTransactionsRoutes); // Assuming you have a separate route for estate transactions
 router.use(
 
     "/api/webhooks",

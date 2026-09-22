@@ -1,31 +1,45 @@
 import Redis from "ioredis";
 
+const isProduction = process.env.NODE_ENV === "production";
+const redisDisabled = process.env.DISABLE_REDIS === "true";
+
+/**
+ * Redis connection options shared by BullMQ / other Redis consumers.
+ *
+ * Production:
+ * - Persistent retries
+ *
+ * Local:
+ * - No automatic reconnect after a failed connection
+ */
 export const redisConnectionOptions = {
   maxRetriesPerRequest: null,
-
   enableReadyCheck: true,
 
-  retryStrategy: (times) => {
-    return Math.min(times * 500, 5000);
-  },
+  retryStrategy: isProduction
+    ? (times) => {
+        // Production: keep retrying forever.
+        return Math.min(times * 1000, 10000);
+      }
+    : () => {
+        // Local: DO NOT reconnect automatically.
+        return null;
+      },
 };
 
 export const getRedisUrl = () => {
-  if (process.env.DISABLE_REDIS === "true") {
+  if (redisDisabled) {
     return null;
   }
 
-  const isProduction =
-    process.env.NODE_ENV === "production";
-
-  if (!isProduction) {
-    return (
-      process.env.REDIS_URL_LOCAL ||
-      "redis://localhost:6379"
-    );
+  if (isProduction) {
+    return process.env.REDIS_URL || null;
   }
 
-  return process.env.REDIS_URL || null;
+  return (
+    process.env.REDIS_URL_LOCAL ||
+    "redis://localhost:6379"
+  );
 };
 
 export const getRedisConnectionConfig = () => {
@@ -48,12 +62,17 @@ const redisUrl = getRedisUrl();
 if (redisUrl) {
   redis = new Redis(redisUrl, {
     ...redisConnectionOptions,
+
+    // Don't establish the connection until Redis is actually used.
     lazyConnect: true,
+
     connectTimeout: 5000,
   });
 
   redis.on("connect", () => {
-    console.log("🔌 Redis connecting...");
+    console.log(
+      `🔌 Redis connecting... (${isProduction ? "production" : "local"})`
+    );
   });
 
   redis.on("ready", () => {
@@ -71,8 +90,7 @@ if (redisUrl) {
   });
 
   redis.on("error", (err) => {
-    const message =
-      err?.message || String(err);
+    const message = err?.message || String(err);
 
     if (
       message.includes("ENOTFOUND") ||
@@ -80,19 +98,18 @@ if (redisUrl) {
       message.includes("ETIMEDOUT")
     ) {
       console.warn(
-        `⚠️ Redis temporarily unavailable: ${message}`
+        `⚠️ Redis unavailable: ${message}`
       );
 
       return;
     }
 
-    console.error(
-      "❌ Redis error:",
-      message
-    );
+    console.error("❌ Redis error:", message);
   });
 } else {
-  console.warn("⚠️ Redis disabled.");
+  console.log(
+    `⚠️ Redis disabled (${isProduction ? "production" : "local"}).`
+  );
 }
 
 export default redis;
