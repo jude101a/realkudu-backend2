@@ -2,7 +2,7 @@ import { Router } from "express";
 import TransactionController from "../controllers/transactions.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
-import validate from "../middlewares/validate.js";
+import {validate} from "../middlewares/validate.middleware.js";
 import {
   initiateTransactionSchema,
   transactionStatusSchema,

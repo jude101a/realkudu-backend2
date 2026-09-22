@@ -3,7 +3,7 @@ const router = Router();
 
 import PaymentController from "../controllers/payment.controller.js";
 
-import validate from "../middlewares/validate.js";
+import {validate} from "../middlewares/validate.middleware.js";
 
 import {protect} from "../middlewares/auth.middleware.js";
 
