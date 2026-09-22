@@ -2,7 +2,7 @@ import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v7";
 // Bump checksum after schema adjustments so migration runs again when applied
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v16";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v17";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
@@ -1554,6 +1554,7 @@ async function createFinanceAndOpsTables(client) {
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS purchase_step VARCHAR(100)`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS funnel_step VARCHAR(100)`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 0`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS quantity NUMERIC(12,2) DEFAULT 0 CHECK (quantity >= 0)`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS docs_verified BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
   }
