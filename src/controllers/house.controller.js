@@ -37,56 +37,95 @@ const parseBooleanQuery = (value) => {
  *         description: Server error
  */
 export const createHouse = async (req, res) => {
-
-  const token = req.headers.authorization?.split(' ')[1];
-    const {user_id} = jwt.verify(token, process.env.JWT_SECRET);
-    const seller = await SellerModel.findByUserId(user_id);
   try {
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: "Authorization token is required",
+      });
+    }
+
+    const { user_id } = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (!user_id) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid token: user_id is missing",
+      });
+    }
+
+    const seller = await SellerModel.findByUserId(user_id);
+
+    if (!seller) {
+      return res.status(404).json({
+        success: false,
+        error: "Seller account not found",
+      });
+    }
+
+    console.log("👤 Authenticated user_id:", user_id);
+    console.log("👤 Seller:", seller);
+    console.log("👤 seller_id:", seller.seller_id);
+
     const payload = {
-  sellerId: seller.seller_id, // add this
-  estateId: req.body.estateId ?? null,
-  lawyerId: req.body.lawyerId || null,
-  caretakerId: req.body.caretakerId || null,
-  name: req.body.name,
-  type: req.body.type,
-  address: req.body.address,
-  coverImageUrl: req.body.coverImageUrl ?? null,
-  isSingleHouse: req.body.isSingleHouse === true,
-  state: req.body.state,
-  lga: req.body.lga,
-};
+      sellerId: seller.seller_id,
+      estateId: req.body.estateId ?? null,
+      lawyerId: req.body.lawyerId || null,
+      caretakerId: req.body.caretakerId || null,
+      name: req.body.name,
+      type: req.body.type,
+      address: req.body.address,
+      coverImageUrl: req.body.coverImageUrl ?? null,
+      isSingleHouse: req.body.isSingleHouse === true,
+      state: req.body.state,
+      lga: req.body.lga,
+    };
+
+    console.log("🏠 House payload:", payload);
+
     const result = await HouseModel.create(payload);
 
     // Attach uploaded images if provided
     const files = req.files || (req.file ? [req.file] : []);
-    if (files.length) {
-      const uploads = req.images;
-      try {
-        
 
+    if (files.length) {
+      const uploads = req.images || [];
+
+      try {
         const coverIndex = Number(req.body.coverIndex);
+
         const images = uploads.map((upload, index) =>
           toMediaPayload({
             propertyId: result.house_id,
-            isCover: Number.isInteger(coverIndex) && coverIndex === index,
+            isCover:
+              Number.isInteger(coverIndex) &&
+              coverIndex === index,
             file: files[index],
             upload,
           })
         );
 
-        await ImagesModel.insertMultipleImages(result.house_id, images);
+        await ImagesModel.insertMultipleImages(
+          result.house_id,
+          images
+        );
       } catch (err) {
-        console.error("error uploading house images", err?.message || err);
+        console.error(
+          "Error uploading house images:",
+          err?.message || err
+        );
       }
     }
 
     try {
       await sendNotification({
         title: "Property creation",
-        body: "${result.title} has been created successfully.\n Let's market this together!!.",
+        body: `${result.title || result.name} has been created successfully.\nLet's market this together!!`,
         channels: ["EMAIL", "PUSH"],
         data: {
-          "property": result
+          property: result,
         },
         email: seller.email,
         jobName: "sendAccountActionEmail",
@@ -94,16 +133,23 @@ export const createHouse = async (req, res) => {
         userId: seller.seller_id,
       });
     } catch (error) {
-      logger.error("Failed to send house creation notification:", error.message || error);
+      logger.error(
+        "Failed to send house creation notification:",
+        error.message || error
+      );
     }
 
-    res.status(201).json(result);
+    return res.status(201).json(result);
+
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("❌ createHouse error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 };
-
-
 /**
  * @swagger
  * /api/houses/{id}:
