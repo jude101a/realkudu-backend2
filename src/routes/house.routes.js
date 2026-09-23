@@ -59,7 +59,7 @@ protectedRouter.put(
 protectedRouter.post(
   "/",
   protect,
-  validate({ body: createHouseSchema }),
+  
   createHouse
 );
 /* Legacy compatibility */

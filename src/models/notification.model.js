@@ -72,13 +72,30 @@ export async function getOneSignalToken(userId) {
 
 export async function saveNotification({ userId, title, body, data = {} }) {
   try {
-    notification = await pool.query(
-      `INSERT INTO ${NOTIFICATIONS_TABLE} (user_id, title, body, data) VALUES ($1, $2, $3, $4)`,
+    const { rows } = await pool.query(
+      `
+        INSERT INTO ${NOTIFICATIONS_TABLE}
+          (user_id, title, body, data)
+        VALUES
+          ($1, $2, $3, $4)
+        RETURNING *
+      `,
       [userId, title, body, data]
     );
-    return notification.rows[0];
+
+    return rows[0] || null;
   } catch (err) {
-    console.error('[notification.model] saveNotification failed', { userId, title, error: err?.message || err });
+    console.error("[notification.model] saveNotification failed", {
+      userId,
+      title,
+      body,
+      data,
+      error: err?.message || err,
+      code: err?.code,
+      detail: err?.detail,
+      constraint: err?.constraint,
+    });
+
     throw err;
   }
 }

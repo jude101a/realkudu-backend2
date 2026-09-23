@@ -45,24 +45,95 @@ import {saveNotification} from '../models/notification.model.js';
 
 
 // Controller-friendly API used across the app
-export async function sendNotification({ email,jobName,userName, userId, title, body, channels = ['PUSH'], data = {} }) {
+export async function sendNotification({
+  email,
+  jobName,
+  userName,
+  userId,
+  title,
+  body,
+  channels = ["PUSH"],
+  data = {},
+}) {
   const jobs = [];
-  const emailPayload = { email:email , actionCall: title, userName: userName, reason: body };
 
-try {
-   const notification = await saveNotification({ userId, title, body, data });
-  
+  const emailPayload = {
+    email,
+    actionCall: title,
+    userName,
+    reason: body,
+  };
 
-  for (const ch of channels) {
-    const upper = String(ch || '').toUpperCase();
-    if (upper === 'PUSH') jobs.push(pushQueue.add( {userId, title, body, data, notificationId: notification?.id}));
-    else if (upper === 'EMAIL') jobs.push(emailQueue.add(emailPayload));
-    else return Promise.reject(new Error(`Unknown notification channel: ${ch}`));
-  }
+  try {
+    // 1. Save notification to database
+    const notification = await saveNotification({
+      userId,
+      title,
+      body,
+      data,
+    });
 
+    // 2. Process requested channels
+    for (const ch of channels) {
+      const upper = String(ch || "").toUpperCase();
+
+      // -------------------------
+      // PUSH
+      // -------------------------
+      if (upper === "PUSH") {
+        if (!pushQueue) {
+          console.warn(
+            "[notification.service] PUSH skipped: pushQueue is unavailable (Redis disabled)"
+          );
+          continue;
+        }
+
+        jobs.push(
+          pushQueue.add("send-push-notification", {
+            userId,
+            title,
+            body,
+            data,
+            notificationId: notification?.id,
+          })
+        );
+      }
+
+      // -------------------------
+      // EMAIL
+      // -------------------------
+      else if (upper === "EMAIL") {
+        if (!emailQueue) {
+          console.warn(
+            "[notification.service] EMAIL skipped: emailQueue is unavailable"
+          );
+          continue;
+        }
+
+        jobs.push(
+          emailQueue.add("send-email-notification", emailPayload)
+        );
+      }
+
+      // -------------------------
+      // UNKNOWN CHANNEL
+      // -------------------------
+      else {
+        console.warn(
+          `[notification.service] Unknown notification channel: ${ch}`
+        );
+      }
+    }
   } catch (err) {
-    console.error('[notification.service] sendNotification failed to save notification', { userId, title, error: err?.message || err });
-  } 
+    console.error(
+      "[notification.service] sendNotification failed",
+      {
+        userId,
+        title,
+        error: err?.message || err,
+      }
+    );
+  }
 
   return Promise.allSettled(jobs);
 }

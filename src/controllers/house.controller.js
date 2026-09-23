@@ -38,17 +38,10 @@ const parseBooleanQuery = (value) => {
  */
 export const createHouse = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
 
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        error: "Authorization token is required",
-      });
-    }
 
-    const { user_id } = jwt.verify(token, process.env.JWT_SECRET);
-
+const user_id = req.user.id;
+console.log("userid====== ",user_id)
     if (!user_id) {
       return res.status(401).json({
         success: false,
@@ -57,20 +50,20 @@ export const createHouse = async (req, res) => {
     }
 
     const seller = await SellerModel.findByUserId(user_id);
+    const seller_id = seller.rows[0].id;
+    console.log("Seller", seller_id)
 
-    if (!seller) {
+    if (!seller_id) {
       return res.status(404).json({
         success: false,
-        error: "Seller account not found",
+        error: "Seller id not found",
       });
     }
 
-    console.log("👤 Authenticated user_id:", user_id);
-    console.log("👤 Seller:", seller);
-    console.log("👤 seller_id:", seller.seller_id);
+    console.log("👤 seller_id:", seller_id);
 
     const payload = {
-      sellerId: seller.seller_id,
+      sellerId: seller_id,
       estateId: req.body.estateId ?? null,
       lawyerId: req.body.lawyerId || null,
       caretakerId: req.body.caretakerId || null,
@@ -87,37 +80,11 @@ export const createHouse = async (req, res) => {
 
     const result = await HouseModel.create(payload);
 
-    // Attach uploaded images if provided
-    const files = req.files || (req.file ? [req.file] : []);
-
-    if (files.length) {
-      const uploads = req.images || [];
-
-      try {
-        const coverIndex = Number(req.body.coverIndex);
-
-        const images = uploads.map((upload, index) =>
-          toMediaPayload({
-            propertyId: result.house_id,
-            isCover:
-              Number.isInteger(coverIndex) &&
-              coverIndex === index,
-            file: files[index],
-            upload,
-          })
-        );
-
         await ImagesModel.insertMultipleImages(
           result.house_id,
-          images
+          result.images
         );
-      } catch (err) {
-        console.error(
-          "Error uploading house images:",
-          err?.message || err
-        );
-      }
-    }
+     
 
     try {
       await sendNotification({
@@ -127,10 +94,10 @@ export const createHouse = async (req, res) => {
         data: {
           property: result,
         },
-        email: seller.email,
+        email: seller.rows[0].business_email,
         jobName: "sendAccountActionEmail",
-        userName: seller.first_name,
-        userId: seller.seller_id,
+        userName: seller.rows[0].business_name,
+        userId: seller_id,
       });
     } catch (error) {
       logger.error(
