@@ -1,6 +1,6 @@
 import pool from "../config/db.js";
 
-const MIGRATION_NAME = "bootstrap_schema_v7";
+const MIGRATION_NAME = "bootstrap_schema_v12";
 // Bump checksum after schema adjustments so migration runs again when applied
 const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v17";
 
@@ -627,6 +627,44 @@ async function ensureUpdatedAtTriggerForTable(client, tableName) {
 
 async function createPurchaseProcessTables(client) {
   await client.query(`
+  CREATE TABLE IF NOT EXISTS purchase_process_steps (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    order_id UUID NOT NULL
+      REFERENCES property_orders(order_id)
+      ON DELETE CASCADE,
+
+    step VARCHAR(100) NOT NULL,
+
+    status VARCHAR(50),
+
+    notes TEXT,
+
+    stepdata JSONB DEFAULT '{}'::jsonb,
+  
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+`);
+
+await client.query(`
+  CREATE INDEX IF NOT EXISTS idx_purchase_process_steps_order_id
+  ON purchase_process_steps(order_id);
+`);
+await client.query(`
+  ALTER TABLE purchase_process_steps
+  ADD COLUMN IF NOT EXISTS step_data JSONB DEFAULT '{}'::jsonb;
+`);
+await client.query(`
+  CREATE INDEX IF NOT EXISTS idx_purchase_process_steps_created_at
+  ON purchase_process_steps(created_at);
+`);
+    console.log("[DB] purchase_process_steps table created or already exists");
+
+
+  await client.query(`
     CREATE TABLE IF NOT EXISTS purchase_process_inspection_payments (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       buyer_id UUID,
@@ -1167,7 +1205,7 @@ async function createPropertyTables(client) {
       deleted_at TIMESTAMPTZ
     );
   `);
-
+// estates
   await client.query(`
     CREATE TABLE IF NOT EXISTS images (
   imageId UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1194,7 +1232,7 @@ async function createPropertyTables(client) {
 );
   `);
   await ensureTableColumns(client, "images", IMAGES_TABLE_COLUMNS);
-
+// houses
   await client.query(`
     CREATE TABLE IF NOT EXISTS houses (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1519,7 +1557,7 @@ async function createFinanceAndOpsTables(client) {
     CREATE TABLE IF NOT EXISTS property_orders (
       order_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       buyer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
       agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
       lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL,
       property_id UUID NOT NULL,
@@ -1547,10 +1585,18 @@ async function createFinanceAndOpsTables(client) {
       cancelled_at TIMESTAMPTZ,
       deleted_at TIMESTAMPTZ
     );
+    
   `);
+
 
   // Ensure new columns that model code expects exist on older DBs.
   async function ensurePropertyOrdersColumns(client) {
+    await client.query(`ALTER TABLE property_orders
+DROP CONSTRAINT IF EXISTS property_orders_seller_id_fkey`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS buyer_id UUID REFERENCES users(id) ON DELETE CASCADE`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS agent_id UUID REFERENCES users(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS purchase_step VARCHAR(100)`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS funnel_step VARCHAR(100)`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 0`);

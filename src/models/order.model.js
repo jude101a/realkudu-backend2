@@ -1,175 +1,362 @@
+
 import pool from "../config/db.js";
 import { withTransaction } from "../config/withTransaction.js";
-import { mapPayload, buildInsert } from "../utils/mapPayload.js";
 import PurchaseProcessStepModel from "./purchase.process.model.js";
 import AppError from "../utils/appError.js";
 
-const ORDERS_TABLE = "orders";
+const ORDERS_TABLE = "property_orders";
 
 const ORDER_FIELD_MAP = Object.freeze({
-  reference: "reference",
-  transactionType: "transaction_type",
-  coverImageUrl: "cover_image_url",
-  title: "title",
-  propertyType: "property_type",
-  propertyId: "property_id",
-  userId: "user_id",
+  buyerId: "buyer_id",
   sellerId: "seller_id",
-  amount: "amount",
+  agentId: "agent_id",
+  lawyerId: "lawyer_id",
+  propertyId: "property_id",
   quantity: "quantity",
-  platformFee: "platform_fee",
-  currency: "currency",
+  propertyType: "property_type",
   status: "status",
+  paymentType: "payment_type",
+  bookingFee: "booking_fee",
+  agreedAmount: "agreed_amount",
+  amountPaid: "amount_paid",
+  currency: "currency",
+  inspectionRequired: "inspection_required",
+  inspectionCompleted: "inspection_completed",
+  dueDiligenceCompleted: "due_diligence_completed",
+  agreementSigned: "agreement_signed",
+  governmentConsentRequired: "government_consent_required",
+  notes: "notes",
   purchaseStep: "purchase_step",
-  escrowStatus: "escrow_status",
-  paymentChannel: "payment_channel",
+  funnelStep: "funnel_step",
+  version: "version",
+  docsVerified: "docs_verified",
+  completedAt: "completed_at",
+  cancelledAt: "cancelled_at",
+  deletedAt: "deleted_at",
 });
 
 const REQUIRED_ORDER_FIELDS = [
-  "reference",
-  "transactionType",
-  "title",
-  "propertyType",
+  "buyerId",
+  "sellerId",
   "propertyId",
-  "userId",
-  "amount",
-  "purchaseStep",
+  "propertyType",
+  "status",
+  "paymentType",
+  "agreedAmount",
 ];
 
+function mapPayload(payload) {
+  const mapped = {};
+
+  for (const [camelCase, snakeCase] of Object.entries(ORDER_FIELD_MAP)) {
+    if (payload[camelCase] !== undefined) {
+      mapped[snakeCase] = payload[camelCase];
+    }
+  }
+
+  return mapped;
+}
+
+function buildInsert(table, data) {
+  const entries = Object.entries(data);
+
+  if (!entries.length) {
+    throw new AppError("No order fields supplied", 400);
+  }
+
+  const columns = entries.map(([column]) => column);
+  const values = entries.map(([, value]) => value);
+
+  const placeholders = values.map((_, index) => `$${index + 1}`);
+
+  return {
+    text: `
+      INSERT INTO ${table} (
+        ${columns.join(", ")}
+      )
+      VALUES (
+        ${placeholders.join(", ")}
+      )
+      RETURNING *
+    `,
+    values,
+  };
+}
+
 class OrderModel {
-  /**
-   * Creates the order (the anchor record for a purchase process) and
-   * its first step row atomically. Called when the inspection fee
-   * payment succeeds.
-   *
-   * @param {Object} payload - camelCase order fields (see ORDER_FIELD_MAP)
-   * @param {Object} [initialStepData]
-   * @returns {Promise<{ order: Object, step: Object }>}
-   */
   static async create(payload, initialStepData = {}) {
-    const missing = REQUIRED_ORDER_FIELDS.filter((field) => payload[field] === undefined || payload[field] === null);
+    const missing = REQUIRED_ORDER_FIELDS.filter(
+      (field) =>
+        payload[field] === undefined ||
+        payload[field] === null
+    );
+
     if (missing.length) {
-      throw new AppError(`Missing required order fields: ${missing.join(", ")}`, 400);
+      throw new AppError(
+        `Missing required order fields: ${missing.join(", ")}`,
+        400
+      );
     }
 
     return withTransaction(async (client) => {
-      const mapped = mapPayload(payload, ORDER_FIELD_MAP);
-      const { text, values } = buildInsert(ORDERS_TABLE, mapped);
-      const { rows: [order] } = await client.query(text, values);
+      const mapped = mapPayload(payload);
 
-      const step = await PurchaseProcessStepModel.create(
-        client,
-        order.id,
-        order.purchase_step,
-        initialStepData
+      const { text, values } = buildInsert(
+        ORDERS_TABLE,
+        mapped
       );
 
-      return { order, step };
+      const {
+        rows: [order],
+      } = await client.query(text, values);
+
+      const step = order.purchase_step
+        ? await PurchaseProcessStepModel.create(
+            client,
+            order.order_id,
+            order.purchase_step,
+            initialStepData
+          )
+        : null;
+
+      return {
+        order,
+        step,
+      };
     });
   }
 
-  /**
-   * Advances the order's purchase_step pointer and logs the step event
-   * atomically. This is the single write path for every step transition
-   * (confirmations, reschedules, uploads, etc.) — callers pass whichever
-   * step name applies.
-   *
-   * @param {string} orderId
-   * @param {string} step
-   * @param {Object} [stepData]
-   */
-  static async advanceStep(orderId, step, stepData = {}) {
+  static async advanceStep(
+    orderId,
+    step,
+    stepData = {}
+  ) {
     return withTransaction(async (client) => {
       const { rows } = await client.query(
-        `SELECT id FROM ${ORDERS_TABLE} WHERE id = $1 FOR UPDATE`,
+        `
+          SELECT
+            order_id,
+            status,
+            purchase_step,
+            funnel_step,
+            version
+          FROM ${ORDERS_TABLE}
+          WHERE order_id = $1
+            AND deleted_at IS NULL
+          FOR UPDATE
+        `,
         [orderId]
       );
+
       if (!rows.length) {
-        throw new AppError(`Order ${orderId} not found`, 404);
+        throw new AppError(
+          `Order ${orderId} not found`,
+          404
+        );
       }
 
-      const stepRow = await PurchaseProcessStepModel.create(client, orderId, step, stepData);
+      const stepRow =
+        await PurchaseProcessStepModel.create(
+          client,
+          orderId,
+          step,
+          stepData
+        );
 
-      const { rows: [order] } = await client.query(
-        `UPDATE ${ORDERS_TABLE} SET purchase_step = $1 WHERE id = $2 RETURNING *`,
+      const {
+        rows: [order],
+      } = await client.query(
+        `
+          UPDATE ${ORDERS_TABLE}
+          SET
+            purchase_step = $1,
+            updated_at = NOW(),
+            version = version + 1
+          WHERE order_id = $2
+            AND deleted_at IS NULL
+          RETURNING *
+        `,
         [step, orderId]
       );
 
-      return { order, step: stepRow };
+      return {
+        order,
+        step: stepRow,
+      };
     });
   }
 
   static async markCompleted(orderId) {
-    const { rows } = await pool.query(
-      `UPDATE ${ORDERS_TABLE}
-       SET status = 'success', completed_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
+    const {
+      rows: [order],
+    } = await pool.query(
+      `
+        UPDATE ${ORDERS_TABLE}
+        SET
+          status = 'completed',
+          completed_at = COALESCE(completed_at, NOW()),
+          updated_at = NOW(),
+          version = version + 1
+        WHERE order_id = $1
+          AND deleted_at IS NULL
+        RETURNING *
+      `,
       [orderId]
     );
-    if (!rows.length) {
-      throw new AppError(`Order ${orderId} not found`, 404);
+
+    if (!order) {
+      throw new AppError(
+        `Order ${orderId} not found`,
+        404
+      );
     }
-    return rows[0];
+
+    return order;
   }
 
   static async markFailed(orderId) {
-    const { rows } = await pool.query(
-      `UPDATE ${ORDERS_TABLE}
-       SET status = 'failed'
-       WHERE id = $1
-       RETURNING *`,
+    const {
+      rows: [order],
+    } = await pool.query(
+      `
+        UPDATE ${ORDERS_TABLE}
+        SET
+          status = 'failed',
+          updated_at = NOW(),
+          version = version + 1
+        WHERE order_id = $1
+          AND deleted_at IS NULL
+        RETURNING *
+      `,
       [orderId]
     );
-    if (!rows.length) {
-      throw new AppError(`Order ${orderId} not found`, 404);
+
+    if (!order) {
+      throw new AppError(
+        `Order ${orderId} not found`,
+        404
+      );
     }
-    return rows[0];
+
+    return order;
   }
 
   static async findById(orderId) {
-    const { rows } = await pool.query(`SELECT * FROM ${ORDERS_TABLE} WHERE id = $1`, [orderId]);
-    return rows[0] || null;
+    const {
+      rows: [order],
+    } = await pool.query(
+      `
+        SELECT *
+        FROM ${ORDERS_TABLE}
+        WHERE order_id = $1
+          AND deleted_at IS NULL
+      `,
+      [orderId]
+    );
+
+    return order || null;
   }
 
   static async findByReference(reference) {
-    const { rows } = await pool.query(`SELECT * FROM ${ORDERS_TABLE} WHERE reference = $1`, [reference]);
-    return rows[0] || null;
+    return null;
   }
 
-  /** All orders for a given buyer, most recent first. */
-  static async findByUserId(userId, { limit = 20, offset = 0 } = {}) {
+  static async findByUserId(
+    userId,
+    { limit = 20, offset = 0 } = {}
+  ) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${ORDERS_TABLE}
-       WHERE user_id = $1
-       ORDER BY created_at DESC
-       LIMIT $2 OFFSET $3`,
+      `
+        SELECT *
+        FROM ${ORDERS_TABLE}
+        WHERE buyer_id = $1
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT $2
+        OFFSET $3
+      `,
       [userId, limit, offset]
     );
+
     return rows;
   }
 
-  /** All orders for a given property (e.g. seller-facing view). */
+  static async findByBuyerId(
+    buyerId,
+    { limit = 20, offset = 0 } = {}
+  ) {
+    return this.findByUserId(
+      buyerId,
+      { limit, offset }
+    );
+  }
+
   static async findByPropertyId(propertyId) {
     const { rows } = await pool.query(
-      `SELECT * FROM ${ORDERS_TABLE} WHERE property_id = $1 ORDER BY created_at DESC`,
+      `
+        SELECT *
+        FROM ${ORDERS_TABLE}
+        WHERE property_id = $1
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC
+      `,
       [propertyId]
     );
+
     return rows;
   }
 
-  /** Order plus its full step history and linked transactions. */
+  static async findBySellerId(
+    sellerId,
+    { limit = 20, offset = 0 } = {}
+  ) {
+    const { rows } = await pool.query(
+      `
+        SELECT *
+        FROM ${ORDERS_TABLE}
+        WHERE seller_id = $1
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT $2
+        OFFSET $3
+      `,
+      [sellerId, limit, offset]
+    );
+
+    return rows;
+  }
+
   static async getFullHistory(orderId) {
     const order = await this.findById(orderId);
-    if (!order) return null;
 
-    const [steps, { rows: transactions }] = await Promise.all([
-      PurchaseProcessStepModel.findByOrderId(orderId),
-      pool.query(`SELECT * FROM transactions WHERE order_id = $1 ORDER BY created_at ASC`, [orderId]),
-    ]);
+    if (!order) {
+      return null;
+    }
 
-    return { order, steps, transactions };
+    const [steps, { rows: transactions }] =
+      await Promise.all([
+        PurchaseProcessStepModel.findByOrderId(
+          orderId
+        ),
+
+        pool.query(
+          `
+            SELECT *
+            FROM transactions
+            WHERE order_id = $1
+            ORDER BY created_at ASC
+          `,
+          [orderId]
+        ),
+      ]);
+
+    return {
+      order,
+      steps,
+      transactions,
+    };
   }
 }
 
 export default OrderModel;
+

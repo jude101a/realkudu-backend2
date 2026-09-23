@@ -217,3 +217,11 @@ export const confirmDocumentUpload = wrap(async (req, res) => {
 
   return ok(res, process, "Document upload confirmed successfully");
 });
+
+export const initiateOrder = wrap(async (req, res) => {
+  const process = await PurchaseProcessModel.initiateOrder(
+    req.params.propertyId,
+    getBuyerIdFromBody(req),
+    req.body
+  );  
+});

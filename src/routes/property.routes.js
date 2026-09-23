@@ -82,7 +82,7 @@ router.post("/create",
 router.put(
   "/update/:propertyId",
 
-  // validate({ params: propertyIdParamSchema }),
+  protect,
 
   updateProperty
 );

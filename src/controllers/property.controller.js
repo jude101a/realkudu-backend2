@@ -186,6 +186,7 @@ export const createProperty = wrap(async (req, res) => {
 });
 
 export const updateProperty = wrap(async (req, res) => {
+  const userId = req.user.id;
   const { propertyId } = req.params;
   if (!validateUuidField(res, propertyId, "propertyId")) return;
 

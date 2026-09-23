@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createOrder } from "../controllers/order.controller.js";
 import {
   confirmContractSigning,
   confirmDocumentUpload,
@@ -39,6 +40,11 @@ router.patch(
   "/:propertyId/inspection/confirm",
   validate({ params: propertyIdParamSchema, body: confirmInspectionSchema }),
   confirmInspection
+);
+router.post(
+  "/create-order",
+  protect,
+  createOrder
 );
 router.post(
   "/:propertyId/payment/request",
