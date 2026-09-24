@@ -48,7 +48,7 @@ const adminOnly = [protect];
 
 /* Public read routes */
 // router.get("/", validate({ query: paginationQuerySchema }), getAllApartments);
-router.get("/house/:houseId",protect, validate({ params: houseIdParamSchema }), getApartmentsByHouse);
+router.get("/house/:houseId", validate({ params: houseIdParamSchema }), getApartmentsByHouse);
 // router.get("/v2/list", validate({ query: filterQuerySchema }), listApartments);
 // router.get("/v2/search", validate({ query: searchQuerySchema }), searchApartments);
 // router.get("/v2/filter", validate({ query: filterQuerySchema }), filterApartments);
