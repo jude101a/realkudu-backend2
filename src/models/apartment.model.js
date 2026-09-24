@@ -209,7 +209,6 @@ static async findByHouseId(houseId) {
         a.property_type,
         a.price,
         a.cover_image_url,
-        a.tenant_id,
 
         -- Tenant metadata
         tm.id AS tenant_meta_id,
