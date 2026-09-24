@@ -92,6 +92,7 @@ const PROPERTY_TABLE_COLUMNS = Object.freeze([
   { name: "house_name", typeSql: "VARCHAR(255)" },
   { name: "unit_number", typeSql: "VARCHAR(50)" },
   { name: "property_type", typeSql: "TEXT" },
+  { name: "property_subtype", typeSql: "TEXT"},
   { name: "quantity", typeSql: "NUMERIC(12,2)", defaultSql: "0" },
   { name: "bedrooms", typeSql: "INTEGER", defaultSql: "0" },
   { name: "kitchens", typeSql: "INTEGER", defaultSql: "0" },
@@ -1190,6 +1191,7 @@ async function ensureCustomTypes(client) {
 }
 
 async function createPropertyTables(client) {
+  // estate table
   await client.query(`
     CREATE TABLE IF NOT EXISTS estates (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1205,7 +1207,7 @@ async function createPropertyTables(client) {
       deleted_at TIMESTAMPTZ
     );
   `);
-// estates
+// images
   await client.query(`
     CREATE TABLE IF NOT EXISTS images (
   imageId UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1256,6 +1258,7 @@ async function createPropertyTables(client) {
 
   await ensurePropertyTableHotfix(client);
 
+// property purchase activity
   await client.query(`
     CREATE TABLE IF NOT EXISTS property_purchase_activities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1300,6 +1303,7 @@ async function ensurePropertyTableHotfix(client) {
       living_rooms INTEGER DEFAULT 0 CHECK (living_rooms >= 0),
       toilets INTEGER DEFAULT 0 CHECK (toilets >= 0),
       room_size VARCHAR(100),
+      property_subtype TEXT,
       size NUMERIC,
       floors INTEGER DEFAULT 0 CHECK (floors >= 0),
       has_running_water BOOLEAN DEFAULT FALSE,

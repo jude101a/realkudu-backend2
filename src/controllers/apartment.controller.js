@@ -2,6 +2,8 @@ import ApartmentModel from "../models/apartment.model.js";
 
 import SellerModel from "../models/seller.model.js";
 import HouseModel from "../models/house.model.js";
+import { getUserByEmail } from "./user.controller.js";
+import { getPropertyById } from "./property.controller.js";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -92,6 +94,23 @@ export const updateApartmentTenant = wrap(async (req, res) => {
 });
 
 export const createTenantMeta = wrap(async (req, res) => {
+    const body = req.body;
+    const property = getPropertyById(req)
+    const tenant = getUserByEmail(body.tenantEmail);
+
+    const payload ={
+       tenantId : body.tenantId,
+       propertyId : property.property_id,
+     propertyType : property.property_subtype,
+      rentAmount : property.price ,
+      rentCurrency: body.rentCurrency,
+      rentFrequency : property.paymentFrequency,
+      isActiveTenant : true,
+      hasPaidCurrentRent: true,
+      nextDueDate : body.nextDueDate,
+      outstandingBalance : body.outstandingBalance,
+    };
+    
   const record = await ApartmentModel.createTenantMeta(req.body || {});
   return ok(res, record, "Tenant meta created successfully", undefined, 201);
 });

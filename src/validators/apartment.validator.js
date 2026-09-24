@@ -102,11 +102,11 @@ export const createTenantMetaSchema = Joi.object({
   tenantMetaID: uuid,
   tenantID: uuid.required(),
   propertyID: uuid.required(),
-  propertyType: Joi.string().trim().valid("apartment", "house", "land").required(),
-  rentAmount: Joi.number().min(0).required(),
+  propertyType: Joi.string().trim(),
+  rentAmount: Joi.number().min(0),
   rentCurrency: Joi.string().trim().max(10).default("NGN"),
   rentFrequency: Joi.string().trim().valid("monthly", "quarterly", "yearly").required(),
-  tenancyStartDate: Joi.date().required(),
+  tenancyStartDate: Joi.date(),
   tenancyEndDate: Joi.date().allow(null),
   isActiveTenant: Joi.boolean().default(true),
   hasPaidCurrentRent: Joi.boolean().default(false),
@@ -114,7 +114,7 @@ export const createTenantMetaSchema = Joi.object({
   lastPaymentDate: Joi.date().allow(null),
   nextDueDate: Joi.date().allow(null),
   outstandingBalance: Joi.number().min(0).default(0),
-  tenancyStatus: Joi.string().trim().max(30).required(),
+  tenancyStatus: Joi.string().trim().max(30),
 });
 
 export const tenantMetaByTenantQuerySchema = Joi.object({
