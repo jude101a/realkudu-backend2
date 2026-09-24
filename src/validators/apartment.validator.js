@@ -105,7 +105,7 @@ export const createTenantMetaSchema = Joi.object({
   propertyType: Joi.string().trim(),
   rentAmount: Joi.number().min(0),
   rentCurrency: Joi.string().trim().max(10).default("NGN"),
-  rentFrequency: Joi.string().trim().valid("monthly", "quarterly", "yearly").required(),
+  rentFrequency: Joi.string().trim().valid("monthly", "quarterly", "yearly"),
   tenancyStartDate: Joi.date(),
   tenancyEndDate: Joi.date().allow(null),
   isActiveTenant: Joi.boolean().default(true),
