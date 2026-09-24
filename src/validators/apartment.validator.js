@@ -99,9 +99,9 @@ export const tenantMetaIdParamSchema = Joi.object({
 });
 
 export const createTenantMetaSchema = Joi.object({
-  tenantMetaID: uuid,
-  tenantID: uuid.required(),
-  propertyID: uuid.required(),
+  tenantMetaId: uuid,
+  tenantId: uuid.required(),
+  propertyId: uuid.required(),
   propertyType: Joi.string().trim(),
   rentAmount: Joi.number().min(0),
   rentCurrency: Joi.string().trim().max(10).default("NGN"),
