@@ -4,6 +4,7 @@ import SellerModel from "../models/seller.model.js";
 import HouseModel from "../models/house.model.js";
 import { getUserByEmail } from "./user.controller.js";
 import { getPropertyById } from "./property.controller.js";
+import { getUserById } from "../models/admin.model.js";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -58,12 +59,7 @@ const normalizeApartmentPayload = (payload = {}) => {
   if (normalized.tenantId === undefined && normalized.tenantID !== undefined) {
     normalized.tenantId = normalized.tenantID;
   }
-  if (
-    normalized.kitchens === undefined &&
-    normalized.kitchens !== undefined
-  ) {
-    normalized.kitchens = normalized.kitchens;
-  }
+ 
 
   const boolFields = [
     "hasRunningWater",
@@ -94,25 +90,68 @@ export const updateApartmentTenant = wrap(async (req, res) => {
 });
 
 export const createTenantMeta = wrap(async (req, res) => {
-    const body = req.body;
-    const property = getPropertyById(req)
-    const tenant = getUserByEmail(body.tenantEmail);
+  const body = req.body || {};
 
-    const payload ={
-       tenantId : body.tenantId,
-       propertyId : property.property_id,
-     propertyType : property.property_subtype,
-      rentAmount : property.price ,
-      rentCurrency: body.rentCurrency,
-      rentFrequency : property.paymentFrequency,
-      isActiveTenant : true,
-      hasPaidCurrentRent: true,
-      nextDueDate : body.nextDueDate,
-      outstandingBalance : body.outstandingBalance,
-    };
-    
-  const record = await ApartmentModel.createTenantMeta(req.body || {});
-  return ok(res, record, "Tenant meta created successfully", undefined, 201);
+  const propertyId = body.propertyId ?? body.propertyID;
+  const tenantId = body.tenantId ?? body.tenantID;
+
+  if (!isUuid(propertyId)) {
+    return fail(
+      res,
+      400,
+      "propertyId must be a valid UUID",
+      "VALIDATION_ERROR"
+    );
+  }
+
+  if (!isUuid(tenantId)) {
+    return fail(
+      res,
+      400,
+      "tenantId must be a valid UUID",
+      "VALIDATION_ERROR"
+    );
+  }
+
+  // IMPORTANT:
+  // Do NOT call getPropertyById(req) because that is an Express controller.
+  // Fetch the property directly from your model/service.
+  const property = await ApartmentModel.getPropertyForTenantMeta(propertyId);
+
+  if (!property) {
+    return fail(
+      res,
+      404,
+      "Property not found",
+      "PROPERTY_NOT_FOUND"
+    );
+  }
+
+  const payload = {
+    tenantId,
+    propertyId: property.property_id,
+    propertyType: "apartment",
+    propertySubType: property.propertySubType,
+    rentAmount: property.price,
+    rentCurrency: body.rentCurrency ?? "NGN",
+    rentFrequency: property.payment_duration?.trim().toLowerCase(),
+    isActiveTenant: true,
+    hasPaidCurrentRent: body.hasPaidCurrentRent ?? false,
+    nextDueDate: body.nextDueDate ?? null,
+    outstandingBalance: body.outstandingBalance ?? 0,
+  };
+
+  console.log("🏠 TENANT META PAYLOAD:", payload);
+
+  const record = await ApartmentModel.createTenantMeta(payload);
+
+  return ok(
+    res,
+    record,
+    "Tenant meta created successfully",
+    undefined,
+    201
+  );
 });
 
 export const getTenantMetaByTenant = wrap(async (req, res) => {
@@ -129,37 +168,37 @@ export const getTenantMetaByProperty = wrap(async (req, res) => {
   return ok(res, record, "Tenant meta retrieved successfully");
 });
 
-export const getApartmentsByHouse = wrap (async(req, res)=> {
-    try {
-    // const user_id = req.user_id;
-    // const seller = await SellerModel.findByUserId(user_id);
-    // console.log("userId== ", user_id);
-     const house = await HouseModel.findById(req.params.houseId);
-    // console.log("house", house);
-    // const seller_id = seller.rows[0].sellerId;
-    // console.log(seller_id);
-    // if(!seller_id){
-    //     return "Forbiden";
-    // };
-    // if (!house.rows[0].houseId){
-    //     return "House not found";
-    // };
+export const getApartmentsByHouse = wrap(async (req, res) => {
+  const { houseId } = req.params;
 
-   const result= await ApartmentModel.findByHouseId(house.id);
+  if (!isUuid(houseId)) {
+    return fail(
+      res,
+      400,
+      "houseId must be a valid UUID",
+      "VALIDATION_ERROR"
+    );
+  }
 
-return res.status(200).json({
-  success: true,
-  data: result
+  const house = await HouseModel.findById(houseId);
+
+  if (!house) {
+    return fail(
+      res,
+      404,
+      "House not found",
+      "HOUSE_NOT_FOUND"
+    );
+  }
+
+  const result = await ApartmentModel.findByHouseId(house.id);
+
+  return ok(
+    res,
+    result,
+    "Apartments retrieved successfully"
+  );
 });
-
-    } catch (error)
-    {
-console.log(error);
-    }
-
-
-});
-
 export const markRentPaid = wrap(async (req, res) => {
   const record = await ApartmentModel.markRentPaid(
     req.params.tenantMetaId,

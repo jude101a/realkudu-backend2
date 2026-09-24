@@ -1,6 +1,6 @@
 import pool from "../config/db.js";
 
-const MIGRATION_NAME = "bootstrap_schema_v12";
+const MIGRATION_NAME = "bootstrap_schema_v14";
 // Bump checksum after schema adjustments so migration runs again when applied
 const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v17";
 
@@ -1354,6 +1354,11 @@ async function ensurePropertyTableHotfix(client) {
       deleted_at TIMESTAMPTZ
     );
   `);
+  await client.query(`
+  ALTER TABLE tenant_meta
+  ADD COLUMN IF NOT EXISTS property_subtype TEXT DEFAULT NULL;
+`);
+
 
   await ensureTableColumns(client, "property", PROPERTY_TABLE_COLUMNS);
   await ensurePropertyTableForeignKeys(client);
@@ -1479,11 +1484,11 @@ async function createFinanceAndOpsTables(client) {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       property_id UUID NOT NULL,
-      property_type VARCHAR(50) NOT NULL,
+      property_type VARCHAR(50),
       rent_amount NUMERIC(12,2) NOT NULL CHECK (rent_amount >= 0),
       rent_currency VARCHAR(10) DEFAULT 'NGN',
       rent_frequency VARCHAR(20) NOT NULL,
-      tenancy_start_date DATE NOT NULL,
+      tenancy_start_date DATE DEFAULT NOW(),
       tenancy_end_date DATE,
       is_active_tenant BOOLEAN DEFAULT TRUE,
       has_paid_current_rent BOOLEAN DEFAULT FALSE,
@@ -1499,6 +1504,10 @@ async function createFinanceAndOpsTables(client) {
       CONSTRAINT chk_tenant_rent_frequency CHECK (rent_frequency IN ('monthly','quarterly','yearly'))
     );
   `);
+  await client.query(`
+  ALTER TABLE tenant_meta
+  ALTER COLUMN tenancy_start_date SET DEFAULT CURRENT_TIMESTAMP;
+`);
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS finance_accounts (

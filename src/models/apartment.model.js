@@ -8,9 +8,9 @@ const TABLE = "property";
 const TENANT_META_TABLE = "tenant_meta";
 
 const TENANT_META_FIELD_MAP = Object.freeze({
-  tenantMetaID: "id",
-  tenantID: "tenant_id",
-  propertyID: "property_id",
+  tenantMetaId: "id",
+  tenantId: "tenant_id",
+  propertyId: "property_id",
   propertyType: "property_type",
   rentAmount: "rent_amount",
   rentCurrency: "rent_currency",
@@ -197,7 +197,7 @@ class ApartmentModel {
   }
 
 static async findByHouseId(houseId) {
-  console.log("model reached");
+  console.log("🏠 ApartmentModel.findByHouseId:", houseId);
 
   try {
     const { rows } = await pool.query(
@@ -209,8 +209,14 @@ static async findByHouseId(houseId) {
         a.property_type,
         a.price,
         a.cover_image_url,
+        a.tenant_id,
 
+        -- Tenant metadata
+        tm.id AS tenant_meta_id,
+        tm.tenant_id AS meta_tenant_id,
+        tm.property_id AS meta_property_id,
         tm.property_type AS meta_property_type,
+        tm.property_subtype,
         tm.rent_amount AS meta_rent_amount,
         tm.rent_currency,
         tm.rent_frequency,
@@ -224,11 +230,12 @@ static async findByHouseId(houseId) {
         tm.outstanding_balance,
         tm.tenancy_status,
 
+        -- Tenant user
         u.id AS tenant_user_id,
         u.first_name,
         u.last_name,
-        u.phone_number,
         u.email,
+        u.phone_number,
         u.address,
         u.profile_image_url,
         u.occupation,
@@ -249,11 +256,10 @@ static async findByHouseId(houseId) {
 
       LEFT JOIN tenant_meta tm
         ON tm.property_id = a.property_id
-        AND tm.property_type = 'apartment'
         AND tm.deleted_at IS NULL
 
       LEFT JOIN users u
-        ON u.id = tm.id
+        ON u.id = tm.tenant_id
         AND u.deleted_at IS NULL
 
       WHERE a.house_id = $1
@@ -264,16 +270,38 @@ static async findByHouseId(houseId) {
       [houseId]
     );
 
-    console.log("✅ Rows fetched:", rows.length);
 
     return rows;
-
   } catch (error) {
-    console.error("❌ DB ERROR:", error.message);
+    console.error("❌ ApartmentModel.findByHouseId DB ERROR:", {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+    });
+
     throw error;
   }
 }
 
+static async getPropertyForTenantMeta(propertyId) {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      property_id,
+      property_type,
+      property_subtype,
+      price,
+      payment_duration
+    FROM ${TABLE}
+    WHERE property_id = $1
+      AND deleted_at IS NULL
+    LIMIT 1
+    `,
+    [propertyId]
+  );
+
+  return rows[0] || null;
+}
   static async findAll({ page = 1, limit = 20, sortBy = "created_at", sortOrder = "desc" } = {}) {
     return this.list({ page, limit, sortBy, sortOrder, filters: {} });
   }
@@ -336,21 +364,103 @@ static async findByHouseId(houseId) {
   }
 
   static async createTenantMeta(data, client = null) {
-    const db = client || pool;
-    const payload = mapTenantMetaPayloadToDb(data);
-    const columns = Object.keys(payload);
-    const values = Object.values(payload);
-    const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
+  const db = client || pool;
 
-    const { rows } = await db.query(
-      `INSERT INTO ${TENANT_META_TABLE} (${columns.join(", ")})
-       VALUES (${placeholders})
-       RETURNING *`,
-      values
-    );
-    return rows[0] || null;
+  const {
+    tenantId,
+    propertyId,
+    propertyType,
+    propertySubtype,
+    rentAmount,
+    rentCurrency = "NGN",
+    rentFrequency,
+    tenancyStartDate = null,
+    tenancyEndDate = null,
+    isActiveTenant = true,
+    hasPaidCurrentRent = false,
+    noticeServed = false,
+    lastPaymentDate = null,
+    nextDueDate = null,
+    outstandingBalance = 0,
+    tenancyStatus = "active",
+  } = data || {};
+
+  console.log("🏠 createTenantMeta payload:", {
+    tenantId,
+    propertyId,
+    propertyType,
+    propertySubtype,
+    rentAmount,
+    rentCurrency,
+    rentFrequency,
+    tenancyStartDate,
+    tenancyEndDate,
+    isActiveTenant,
+    hasPaidCurrentRent,
+    noticeServed,
+    lastPaymentDate,
+    nextDueDate,
+    outstandingBalance,
+    tenancyStatus,
+  });
+
+  if (!tenantId) {
+    throw new Error("tenantId is required");
   }
 
+  if (!propertyId) {
+    throw new Error("propertyId is required");
+  }
+
+
+
+  const { rows } = await db.query(
+    `
+    INSERT INTO ${TENANT_META_TABLE} (
+      tenant_id,
+      property_id,
+      property_type,
+      property_subtype,
+      rent_amount,
+      rent_currency,
+      rent_frequency,
+      tenancy_end_date,
+      is_active_tenant,
+      has_paid_current_rent,
+      notice_served,
+      last_payment_date,
+      next_due_date,
+      outstanding_balance,
+      tenancy_status
+    )
+    VALUES (
+      $1, $2, $3, $4, $5, $6,
+      $7, $8, $9, $10, $11, $12,
+      $13, $14, $15
+    )
+    RETURNING *
+    `,
+    [
+      tenantId,
+      propertyId,
+      propertyType,
+      propertySubtype,
+      rentAmount,
+      rentCurrency,
+      rentFrequency,
+      tenancyEndDate,
+      isActiveTenant,
+      hasPaidCurrentRent,
+      noticeServed,
+      lastPaymentDate,
+      nextDueDate,
+      outstandingBalance,
+      tenancyStatus,
+    ]
+  );
+
+  return rows[0] || null;
+}
   static async getTenantMetaByTenant(tenantId) {
     const { rows } = await pool.query(
       `SELECT * FROM ${TENANT_META_TABLE}
