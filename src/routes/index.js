@@ -15,6 +15,7 @@ import paymentRoutes from "./payment.routes.js";
 import transferRoutes from "./transfer.routes.js";
 import walletRoutes from "./wallet.routes.js";
 import tenantRoutes from "./tenant.routes.js";
+import apartmentRoutes from "./apartment.routes.js";
 import transactionRoutes from "./transactions.routes.js";
 import landEstateTransactionsRoutes from "./estate.land.routes.js"; // Assuming you have a separate route for estate transactions
 
@@ -34,7 +35,7 @@ router.use("/purchase-process", purchaseProcessRoutes);
 router.use("/images", imagesRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/admin", adminRoutes);
-
+router.use("/apartment", apartmentRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/transfers", transferRoutes);
 router.use("/wallet", walletRoutes);
