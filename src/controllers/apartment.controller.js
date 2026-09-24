@@ -95,6 +95,17 @@ export const createTenantMeta = wrap(async (req, res) => {
   const propertyId = body.propertyId ?? body.propertyID;
   const tenantId = body.tenantId ?? body.tenantID;
 
+  const tenantMeta = await getTenantMetaByProperty(propertyId);
+
+if (tenantMeta) {
+  return fail(
+    res,
+    409,
+    "Tenant already exists for this property",
+    "DUPLICATION_ERROR"
+  );
+}
+
   if (!isUuid(propertyId)) {
     return fail(
       res,
