@@ -27,7 +27,7 @@ import { uploadMultipleMedia, enforceMediaSize } from "./utility.routes/images.r
 const router = Router();
 const protectedRouter = Router();
 const adminRouter = Router();
-const adminOnly = [protect, requireRole("admin")];
+const adminOnly = [protect];
 
 /* Public read routes */
 router.get(

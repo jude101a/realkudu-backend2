@@ -164,18 +164,227 @@ class EstateModel {
   }
 
   static async findResidentialBySeller(sellerId, options = {}) {
-    return this.list({
-      ...options,
-      filters: { ...(options.filters || {}), sellerId, estateType: "house" },
-    });
+  const {
+    page = 1,
+    limit = 20,
+    sortBy = "created_at",
+    sortOrder = "desc",
+    filters = {},
+  } = options;
+
+  const offset = (page - 1) * limit;
+
+  const allowedSortFields = {
+    id: "e.id",
+    name: "e.name",
+    created_at: "e.created_at",
+    updated_at: "e.updated_at",
+    state: "e.state",
+  };
+
+  const sortColumn =
+    allowedSortFields[String(sortBy).toLowerCase()] ||
+    "e.created_at";
+
+  const order =
+    String(sortOrder).toLowerCase() === "asc"
+      ? "ASC"
+      : "DESC";
+
+  const values = [sellerId];
+  let index = 2;
+
+  const conditions = [
+    `e.seller_id = $1`,
+    `e.deleted_at IS NULL`,
+    // `e.is_estate_land = ` ,
+  ];
+
+  // State
+  if (filters.state) {
+    conditions.push(`e.state = $${index}`);
+    values.push(filters.state);
+    index++;
   }
 
-  static async findLandEstatesBySeller(sellerId, options = {}) {
-    return this.list({
-      ...options,
-      filters: { ...(options.filters || {}), sellerId, isLandEstate: true },
-    });
+  // LGA
+  if (filters.lga) {
+    conditions.push(`e.lga = $${index}`);
+    values.push(filters.lga);
+    index++;
   }
+
+  // Search
+  if (filters.q) {
+    conditions.push(`
+      (
+        e.name ILIKE $${index}
+        OR e.address ILIKE $${index}
+      )
+    `);
+
+    values.push(`%${filters.q}%`);
+    index++;
+  }
+
+  const whereClause = conditions.join(" AND ");
+
+  // Total
+  const countQuery = `
+    SELECT COUNT(*)::int AS count
+    FROM estates e
+    WHERE ${whereClause}
+  `;
+
+  const countResult = await pool.query(
+    countQuery,
+    values
+  );
+
+  const total = Number(
+    countResult.rows[0]?.count || 0
+  );
+
+  // Estates
+  const dataQuery = `
+    SELECT
+      e.*
+    FROM estates e
+    WHERE ${whereClause}
+    ORDER BY ${sortColumn} ${order}
+    LIMIT $${index}
+    OFFSET $${index + 1}
+  `;
+
+  const { rows } = await pool.query(
+    dataQuery,
+    [
+      ...values,
+      limit,
+      offset,
+    ]
+  );
+
+  return {
+    rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit) || 1,
+  };
+}
+
+
+static async findLandEstatesBySeller(sellerId, options = {}) {
+  const {
+    page = 1,
+    limit = 20,
+    sortBy = "created_at",
+    sortOrder = "desc",
+    filters = {},
+  } = options;
+
+  const offset = (page - 1) * limit;
+
+  const allowedSortFields = {
+    id: "e.id",
+    name: "e.name",
+    created_at: "e.created_at",
+    updated_at: "e.updated_at",
+    state: "e.state",
+  };
+
+  const sortColumn =
+    allowedSortFields[String(sortBy).toLowerCase()] ||
+    "e.created_at";
+
+  const order =
+    String(sortOrder).toLowerCase() === "asc"
+      ? "ASC"
+      : "DESC";
+
+  const values = [sellerId];
+  let index = 2;
+
+  const conditions = [
+    `e.seller_id = $1`,
+    `e.deleted_at IS NULL`,
+    `e.estate_type = 'land'`,
+  ];
+
+  // State
+  if (filters.state) {
+    conditions.push(`e.state = $${index}`);
+    values.push(filters.state);
+    index++;
+  }
+
+  // LGA
+  if (filters.lga) {
+    conditions.push(`e.lga = $${index}`);
+    values.push(filters.lga);
+    index++;
+  }
+
+  // Search
+  if (filters.q) {
+    conditions.push(`
+      (
+        e.name ILIKE $${index}
+        OR e.address ILIKE $${index}
+      )
+    `);
+
+    values.push(`%${filters.q}%`);
+    index++;
+  }
+
+  const whereClause = conditions.join(" AND ");
+
+  // Total
+  const countQuery = `
+    SELECT COUNT(*)::int AS count
+    FROM estates e
+    WHERE ${whereClause}
+  `;
+
+  const countResult = await pool.query(
+    countQuery,
+    values
+  );
+
+  const total = Number(
+    countResult.rows[0]?.count || 0
+  );
+
+  // Estates
+  const dataQuery = `
+    SELECT
+      e.*
+    FROM estates e
+    WHERE ${whereClause}
+    ORDER BY ${sortColumn} ${order}
+    LIMIT $${index}
+    OFFSET $${index + 1}
+  `;
+
+  const { rows } = await pool.query(
+    dataQuery,
+    [
+      ...values,
+      limit,
+      offset,
+    ]
+  );
+
+  return {
+    rows,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit) || 1,
+  };
+}
 
   static async updateCoverImage(id, coverImageUrl) {
     return this.updateDetails(id, { coverImageUrl });
