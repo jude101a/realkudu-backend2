@@ -1504,6 +1504,8 @@ async function createFinanceAndOpsTables(client) {
       CONSTRAINT chk_tenant_rent_frequency CHECK (rent_frequency IN ('monthly','quarterly','yearly'))
     );
   `);
+
+  
   await client.query(`
   ALTER TABLE tenant_meta
   ALTER COLUMN tenancy_start_date SET DEFAULT CURRENT_TIMESTAMP;

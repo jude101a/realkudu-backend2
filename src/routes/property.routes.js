@@ -23,6 +23,7 @@ import {
   getSellerProperties,
   getSellerEstateLands,
   safeGetPropertyImages,
+  getHouseForSaleProperties,
 
   
  
@@ -43,7 +44,7 @@ const router = Router();
 const protectedRouter = Router();
 const adminRouter = Router();
 
-const adminOnly = [protect, requireRole("admin")];
+const adminOnly = [protect];
 
 /* ================= PUBLIC READ ROUTES ================= */
 router.get("/get", getAllProperties);
@@ -51,7 +52,7 @@ router.get("/available", getAvailableProperties);
 router.get("/search", search);
 router.get("/list", listProperties);
 router.get("/stats", getPropertiesStats);
-
+router.get("/house/:sellerId/:propertyType", getHouseForSaleProperties);
 router.get("/sellerProperties/:sellerId", getSellerProperties);
 router.get("/sellerHouseApartments/:sellerId/:houseId", getBySellerHouseProperties);
 router.get(

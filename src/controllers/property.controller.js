@@ -248,6 +248,19 @@ export const getEstateProperties = wrap(async (req, res) => {
   return ok(res, properties, "Estate properties retrieved successfully");
 });
 
+export const getHouseForSaleProperties = wrap(async (req, res) => {
+  const { sellerId, propertyType } = req.params;
+
+  if (!validateUuidField(res, sellerId, "sellerId")) return;
+
+  const properties = await PropertyModel.findHouseForSaleProperties(
+    sellerId,
+    propertyType,
+  );
+
+  return ok(res, properties, "House properties retrieved successfully");
+});
+
 export const getAllProperties = wrap(async (req, res) => {
   const source = getRequestInput(req);
   const { page, limit } = parsePagination(source);

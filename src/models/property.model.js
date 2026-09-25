@@ -434,6 +434,20 @@ class PropertyModel {
     return rows;
   }
 
+  static async findHouseForSaleProperties(sellerId, propertyType) {
+    const built = buildFilters({
+      sellerId,
+      propertyType,
+    });
+
+    const { rows } = await pool.query(
+      `SELECT * FROM ${TABLE} WHERE ${built.conditions.join(" AND ")} ORDER BY created_at DESC`,
+      built.values
+    );
+
+    return rows;
+  }
+
   static async findNonEstatePropertiesBySeller(sellerId, propertyType) {
     const built = buildFilters({
       sellerId,
