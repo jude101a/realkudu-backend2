@@ -95,17 +95,7 @@ export const createTenantMeta = wrap(async (req, res) => {
   const propertyId = body.propertyId ?? body.propertyID;
   const tenantId = body.tenantId ?? body.tenantID;
 
-  const tenantMeta = await getTenantMetaByProperty(propertyId);
-
-if (tenantMeta) {
-  return fail(
-    res,
-    409,
-    "Tenant already exists for this property",
-    "DUPLICATION_ERROR"
-  );
-}
-
+  // Validate IDs BEFORE querying the database
   if (!isUuid(propertyId)) {
     return fail(
       res,
@@ -125,9 +115,22 @@ if (tenantMeta) {
   }
 
   // IMPORTANT:
-  // Do NOT call getPropertyById(req) because that is an Express controller.
-  // Fetch the property directly from your model/service.
-  const property = await ApartmentModel.getPropertyForTenantMeta(propertyId);
+  // Call the MODEL here, not the Express controller.
+  const tenantMeta =
+    await ApartmentModel.getTenantMetaByProperty(propertyId);
+
+  if (tenantMeta) {
+    return fail(
+      res,
+      409,
+      "Tenant already exists for this property",
+      "DUPLICATION_ERROR"
+    );
+  }
+
+  // Get property information from the model
+  const property =
+    await ApartmentModel.getPropertyForTenantMeta(propertyId);
 
   if (!property) {
     return fail(
@@ -142,10 +145,12 @@ if (tenantMeta) {
     tenantId,
     propertyId: property.property_id,
     propertyType: "apartment",
-    propertySubType: property.propertySubType,
+    propertySubType: property.property_sub_type,
     rentAmount: property.price,
     rentCurrency: body.rentCurrency ?? "NGN",
-    rentFrequency: property.payment_duration?.trim().toLowerCase(),
+    rentFrequency: property.payment_duration
+      ?.trim()
+      .toLowerCase(),
     isActiveTenant: true,
     hasPaidCurrentRent: body.hasPaidCurrentRent ?? false,
     nextDueDate: body.nextDueDate ?? null,
@@ -154,7 +159,8 @@ if (tenantMeta) {
 
   console.log("🏠 TENANT META PAYLOAD:", payload);
 
-  const record = await ApartmentModel.createTenantMeta(payload);
+  const record =
+    await ApartmentModel.createTenantMeta(payload);
 
   return ok(
     res,
@@ -164,7 +170,6 @@ if (tenantMeta) {
     201
   );
 });
-
 export const getTenantMetaByTenant = wrap(async (req, res) => {
   const tenantId = req.query.tenantID;
   const record = await ApartmentModel.getTenantMetaByTenant(tenantId);
@@ -173,7 +178,7 @@ export const getTenantMetaByTenant = wrap(async (req, res) => {
 });
 
 export const getTenantMetaByProperty = wrap(async (req, res) => {
-  const propertyId = req.query.propertyID;
+  const propertyId = req.query.propertyId;
   const record = await ApartmentModel.getTenantMetaByProperty(propertyId);
   if (!record) return fail(res, 404, "Tenant meta not found", "NOT_FOUND");
   return ok(res, record, "Tenant meta retrieved successfully");
