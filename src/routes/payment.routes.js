@@ -17,9 +17,9 @@ router.post(
 
     "/initialize",
 
-    protect,
+      protect,
 
-    validate(initializePaymentSchema),
+     validate(initializePaymentSchema),
 
     PaymentController.initialize
 

@@ -1,8 +1,8 @@
 import pool from "../config/db.js";
 
-const MIGRATION_NAME = "bootstrap_schema_v14";
+const MIGRATION_NAME = "bootstrap_schema_v16";
 // Bump checksum after schema adjustments so migration runs again when applied
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v17";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v20";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
@@ -1037,49 +1037,6 @@ async function createCoreTables(client) {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      reference VARCHAR(100) UNIQUE NOT NULL,
-      transaction_type VARCHAR(50) NOT NULL,
-      cover_image_url TEXT,
-      title VARCHAR(255) NOT NULL,
-      property_id UUID NOT NULL,
-      user_id UUID NOT NULL,
-      seller_id UUID,
-      amount DECIMAL(10, 2) NOT NULL,
-      platform_fee DECIMAL(10, 2) DEFAULT 0,
-      seller_payout_amount DECIMAL(10, 2),
-      currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
-      status VARCHAR(20) NOT NULL DEFAULT 'in progress',
-      purchase_step VARCHAR(50) NOT NULL DEFAULT 'initiated',
-      escrow_status VARCHAR(20) DEFAULT 'not_applicable',
-      payment_channel VARCHAR(30),
-      gateway_reference VARCHAR(100),
-      gateway_response TEXT,
-      failure_reason TEXT,
-      retry_count INTEGER DEFAULT 0,
-      metadata JSONB DEFAULT '{}',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      completed_at TIMESTAMPTZ,
-      released_at TIMESTAMPTZ
-    );
-
-    
-  `);
-
-  await client.query(`
-  ALTER TABLE transactions
-    ADD COLUMN IF NOT EXISTS user_id UUID,
-    ADD COLUMN IF NOT EXISTS property_id UUID;
-`);
-await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);`);
-await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_property_id ON transactions(property_id);`);
-await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_reference ON transactions(reference);`);
-await client.query(`CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);`);
-  
-
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS device_tokens (
@@ -1644,34 +1601,100 @@ DROP CONSTRAINT IF EXISTS property_orders_seller_id_fkey`);
   `);
   await ensureTableColumns(client, "transfers", TRANSFERS_TABLE_COLUMNS);
 
+  await client.query(`DROP TABLE IF EXISTS transactions CASCADE;`);
+
   
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS transactions (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      reference TEXT NOT NULL UNIQUE,
-      payment_type payment_type NOT NULL,
-      property_id UUID REFERENCES property(property_id) ON DELETE SET NULL,
-      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      seller_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      amount NUMERIC(15, 2) NOT NULL,
-      currency TEXT NOT NULL DEFAULT 'NGN',
-      gateway TEXT NOT NULL DEFAULT 'PAYSTACK',
-      gateway_reference TEXT,
-      authorization_url TEXT,
-      access_code TEXT,
-      status transaction_status NOT NULL DEFAULT 'PENDING',
-      gateway_response JSONB NOT NULL DEFAULT '{}',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
+
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    reference VARCHAR(100) NOT NULL UNIQUE,
+
+    -- What the buyer is paying for
+    payment_type payment_type NOT NULL,
+
+    -- Property involved
+    property_id UUID REFERENCES property(property_id)
+        ON DELETE SET NULL,
+
+    -- Participants
+    buyer_id UUID REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    seller_id UUID REFERENCES sellers(id)
+        ON DELETE SET NULL,
+
+    agent_id UUID REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    -- Property snapshot / display information
+    cover_image_url TEXT,
+    title VARCHAR(255),
+
+    -- Money
+    amount NUMERIC(15, 2) NOT NULL,
+
+    platform_fee NUMERIC(15, 2) NOT NULL DEFAULT 0,
+
+    seller_payout_amount NUMERIC(15, 2),
+
+    currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+
+    -- Payment gateway
+    gateway VARCHAR(30) NOT NULL DEFAULT 'PAYSTACK',
+
+    gateway_reference VARCHAR(100),
+
+    authorization_url TEXT,
+
+    access_code TEXT,
+
+    -- Transaction state
+    status transaction_status NOT NULL DEFAULT 'PENDING',
+
+    purchase_step VARCHAR(50) NOT NULL DEFAULT 'initiated',
+
+    escrow_status VARCHAR(30) DEFAULT 'not_applicable',
+
+    payment_channel VARCHAR(30),
+
+    -- Gateway information
+    gateway_response JSONB NOT NULL DEFAULT '{}',
+
+    failure_reason TEXT,
+
+    -- Retry / additional information
+    retry_count INTEGER NOT NULL DEFAULT 0,
+
+    metadata JSONB NOT NULL DEFAULT '{}',
+
+    -- Lifecycle
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    completed_at TIMESTAMPTZ,
+
+    released_at TIMESTAMPTZ
+);
   `);
+
+
   await ensureTableColumns(client, "transactions", TRANSACTIONS_TABLE_COLUMNS);
   console.log("[DB] Dropping NOT NULL on transactions.user_id...");
 await client.query(`
     ALTER TABLE transactions DROP COLUMN IF EXISTS user_id;
     ALTER TABLE transactions DROP COLUMN IF EXISTS type;
+    ALTER TABLE transactions
+DROP CONSTRAINT transactions_seller_id_fkey;
+
+ALTER TABLE transactions
+ADD CONSTRAINT transactions_seller_id_fkey
+FOREIGN KEY (seller_id)
+REFERENCES sellers(id)
+ON DELETE SET NULL;
 `);
   
 
@@ -1823,101 +1846,127 @@ async function ensureIndexes(client) {
   }
 }
 
+function isRetryableMigrationError(error) {
+  if (!error) return false;
+
+  const code = String(error?.code ?? "");
+  const message = String(error?.message ?? "").toLowerCase();
+
+  return (
+    code === "40001" ||
+    message.includes("could not serialize access") ||
+    message.includes("serialization failure") ||
+    message.includes("cancelled on identification as a pivot")
+  );
+}
+
 export async function initializeDatabaseTablesSafe() {
-  const client = await pool.connect();
-  const startedAt = Date.now();
+  const maxAttempts = 3;
 
-  try {
-    console.log("[DB] migration started");
-
-    await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
-    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [MIGRATION_NAME]);
-
-    await runStep(client, "extensions", () => ensureExtensions(client));
-    await runStep(client, "_migration_history", () => ensureMigrationHistory(client));
-
-    if (await alreadyApplied(client)) {
-      await client.query("COMMIT");
-      console.log("[DB] migration skipped (already applied)");
-      return { success: true, skipped: true };
-    }
-
-    await runStep(client, "custom types/enums", () => ensureCustomTypes(client));
-    await runStep(client, "core tables", () => createCoreTables(client));
-    await runStep(client, "ensure admin columns", () => ensureAdminColumns(client));
-    await runStep(client, "property tables", () => createPropertyTables(client));
-
-    // creates transfers, transactions, escrows, purchase_process_* tables
-    await runStep(client, "finance and ops tables", () => createFinanceAndOpsTables(client));
-
-    // MUST run after escrows/transactions exist — this is what was crashing
-    await runStep(client, "purchase process indexes", () => ensurePurchaseProcessIndexes(client));
-
-    await runStep(client, "images table hotfix", () => ensureImagesTableHotfix(client));
-    await runStep(client, "updated_at triggers", () => ensureUpdatedAtTrigger(client));
-    await runStep(client, "ensure notification tables", () => ensureNotificationTables(client));
-    await runStep(client, "startup schema reconciliation", () => ensureStartupSchemaReconciliation(client));
-    await runStep(client, "indexes", () => ensureIndexes(client));
-
-    const executionTimeMs = Date.now() - startedAt;
-    // ... rest unchanged (insert into _migration_history, COMMIT, etc.)
-    await client.query(
-      `
-        INSERT INTO _migration_history (
-          migration_name, checksum, status, execution_time_ms
-        )
-        VALUES ($1, $2, 'success', $3)
-        ON CONFLICT (migration_name)
-        DO UPDATE SET
-          checksum = EXCLUDED.checksum,
-          status = EXCLUDED.status,
-          execution_time_ms = EXCLUDED.execution_time_ms,
-          error_message = NULL,
-          executed_at = NOW()
-      `,
-      [MIGRATION_NAME, MIGRATION_CHECKSUM, executionTimeMs]
-    );
-
-    await client.query("COMMIT");
-    console.log("[DB] migration completed", { durationMs: executionTimeMs });
-    return { success: true, skipped: false };
-  } catch (error) {
-    try {
-      await client.query("ROLLBACK");
-    } catch (rollbackError) {
-      console.error("[DB] rollback failed", {
-        message: rollbackError.message,
-      });
-    }
-
-    const normalized =
-      error instanceof Error
-        ? error
-        : new Error(typeof error === "string" ? error : "Unknown DB error");
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const client = await pool.connect();
+    const startedAt = Date.now();
 
     try {
-      await pool.query(
+      console.log("[DB] migration started", { attempt });
+
+      await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [MIGRATION_NAME]);
+
+      await runStep(client, "extensions", () => ensureExtensions(client));
+      await runStep(client, "_migration_history", () => ensureMigrationHistory(client));
+
+      if (await alreadyApplied(client)) {
+        await client.query("COMMIT");
+        console.log("[DB] migration skipped (already applied)");
+        return { success: true, skipped: true };
+      }
+
+      await runStep(client, "custom types/enums", () => ensureCustomTypes(client));
+      await runStep(client, "core tables", () => createCoreTables(client));
+      await runStep(client, "ensure admin columns", () => ensureAdminColumns(client));
+      await runStep(client, "property tables", () => createPropertyTables(client));
+
+      // creates transfers, transactions, escrows, purchase_process_* tables
+      await runStep(client, "finance and ops tables", () => createFinanceAndOpsTables(client));
+
+      // MUST run after escrows/transactions exist — this is what was crashing
+      await runStep(client, "purchase process indexes", () => ensurePurchaseProcessIndexes(client));
+
+      await runStep(client, "images table hotfix", () => ensureImagesTableHotfix(client));
+      await runStep(client, "updated_at triggers", () => ensureUpdatedAtTrigger(client));
+      await runStep(client, "ensure notification tables", () => ensureNotificationTables(client));
+      await runStep(client, "startup schema reconciliation", () => ensureStartupSchemaReconciliation(client));
+      await runStep(client, "indexes", () => ensureIndexes(client));
+
+      const executionTimeMs = Date.now() - startedAt;
+      await client.query(
         `
           INSERT INTO _migration_history (
-            migration_name, checksum, status, execution_time_ms, error_message
+            migration_name, checksum, status, execution_time_ms
           )
-          VALUES ($1, $2, 'failed', $3, $4)
+          VALUES ($1, $2, 'success', $3)
           ON CONFLICT (migration_name)
           DO UPDATE SET
             checksum = EXCLUDED.checksum,
             status = EXCLUDED.status,
             execution_time_ms = EXCLUDED.execution_time_ms,
-            error_message = EXCLUDED.error_message,
+            error_message = NULL,
             executed_at = NOW()
         `,
-        [MIGRATION_NAME, MIGRATION_CHECKSUM, Date.now() - startedAt, normalized.message]
+        [MIGRATION_NAME, MIGRATION_CHECKSUM, executionTimeMs]
       );
-    } catch (_) {
-      // Best effort logging only.
-    }
 
-    throw normalized;
-  } finally {
-    client.release();
+      await client.query("COMMIT");
+      console.log("[DB] migration completed", { durationMs: executionTimeMs, attempt });
+      return { success: true, skipped: false };
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("[DB] rollback failed", {
+          message: rollbackError.message,
+        });
+      }
+
+      if (isRetryableMigrationError(error) && attempt < maxAttempts) {
+        console.warn(
+          `[DB] transient serialization conflict during migration attempt ${attempt}. Retrying (${attempt + 1}/${maxAttempts})...`
+        );
+        continue;
+      }
+
+      const normalized =
+        error instanceof Error
+          ? error
+          : new Error(typeof error === "string" ? error : "Unknown DB error");
+
+      try {
+        await pool.query(
+          `
+            INSERT INTO _migration_history (
+              migration_name, checksum, status, execution_time_ms, error_message
+            )
+            VALUES ($1, $2, 'failed', $3, $4)
+            ON CONFLICT (migration_name)
+            DO UPDATE SET
+              checksum = EXCLUDED.checksum,
+              status = EXCLUDED.status,
+              execution_time_ms = EXCLUDED.execution_time_ms,
+              error_message = EXCLUDED.error_message,
+              executed_at = NOW()
+          `,
+          [MIGRATION_NAME, MIGRATION_CHECKSUM, Date.now() - startedAt, normalized.message]
+        );
+      } catch (_) {
+        // Best effort logging only.
+      }
+
+      throw normalized;
+    } finally {
+      client.release();
+    }
   }
+
+  throw new Error("Database migration failed after multiple retry attempts.");
 }

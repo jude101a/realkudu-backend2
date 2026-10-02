@@ -29,9 +29,10 @@ class PaymentService {
         if (!property)
             throw new Error("Property not found.");
 
-        const bookingFee = Number(property.booking_fee ?? property.bookingFee ?? 0);
+        const bookingFee = Number((property.booking_fee ?? property.bookingFee ?? 0) + 1000);
         const price = Number(property.price ?? property.asking_price ?? property.askingPrice ?? 0);
         const rentPrice = Number(property.rent_price ?? property.rentPrice ?? 0);
+        console.log("✅ Payment calculateAmount service reached", { propertyId, paymentType, bookingFee, price, rentPrice, property });
 
         switch (paymentType) {
 
