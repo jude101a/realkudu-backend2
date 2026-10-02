@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import axios from 'axios';
 
 class TransactionRepository {
 
@@ -151,12 +152,22 @@ class TransactionRepository {
      */
 
     async verifyTransaction(reference) {
-        const { rows } = await pool.query(
-            `${this.#baseSelect} WHERE t.reference = $1`,
-            [reference]
-        );
-        return rows[0] ?? null;
-    }
+        
+        try { 
+            if (!process.env.PAYSTACK_SECRET_KEY) {
+                 throw new Error( "PAYSTACK_SECRET_KEY is not configured." );
+             }
+              const response = await axios.get( `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+               { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+                "Content-Type": "application/json" },
+                 timeout: 15000 } ); 
+                 console.log( "🔎 PAYSTACK VERIFY RESPONSE:",
+                     JSON.stringify(response.data, null, 2) );
+                      return response.data;
+                     }
+                      catch (error) { console.error( "❌ PAYSTACK VERIFICATION ERROR:" );
+                         if (error.response) { console.error( "Status:", error.response.status );
+                             console.error( "Response:", JSON.stringify( error.response.data, null, 2 ) ); throw new Error( error.response.data?.message || "Paystack transaction verification failed." ); } console.error( error.message ); throw new Error( "Unable to connect to Paystack for transaction verification." ); } }
 
 
     /**

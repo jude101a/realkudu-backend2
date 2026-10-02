@@ -317,10 +317,7 @@ class PaymentService {
         const verification =
     await TransactionRepository.verifyTransaction(reference);
 
-console.log(
-    "🔎 PAYSTACK VERIFICATION RESULT:",
-    verification
-);
+
 
 if (!verification) {
     throw new Error(
@@ -335,15 +332,14 @@ if (!verification.status) {
     );
 }
 
-        const gateway = verification.data;
+        const gateway = verification;
 
         /**
          * Verify amount
          */
-
         if (
 
-            Number(gateway.amount) !==
+            Number(gateway.data.amount) !==
 
             Number(transaction.amount) * 100
 
@@ -363,7 +359,7 @@ if (!verification.status) {
 
         if (
 
-            gateway.currency !==
+            gateway.data.currency !==
 
             transaction.currency
 
@@ -383,7 +379,7 @@ if (!verification.status) {
 
         if (
 
-            gateway.reference !==
+            gateway.data.reference !==
 
             transaction.reference
 
@@ -403,7 +399,7 @@ if (!verification.status) {
 
         if (
 
-            gateway.status === "success"
+            gateway.data.status === "success"
 
         ) {
 

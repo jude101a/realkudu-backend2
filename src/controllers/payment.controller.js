@@ -50,19 +50,9 @@ class PaymentController {
     async verify(req, res, next) {
     try {
         console.log(
-            "✅ Payment verify controller reached",
+            "✅ Payment verify controller reached:",
             req.params.reference
         );
-
-        const { rows } = await pool.query(
-                    `SELECT * FROM transactions WHERE reference = $1`,
-                    [req.params.reference]
-                );
-                const transaction = rows[0];
-        console.log( "userId:", req.user.id, "transaction.buyer_id:", transaction.buyer_id );
-
-
-       if( transaction.buyer_id === req.user.id ) {
 
         const transaction =
             await PaymentService.verify(
@@ -71,14 +61,8 @@ class PaymentController {
 
         return res.json({
             success: true,
-            message: "Payment verified successfully.",
             data: transaction
-        });} else {
-            return res.status(403).json({
-                success: false,
-                error: "Forbidden: You do not have access to this transaction."
-            });
-        }
+        });
 
     } catch (err) {
         console.error(
@@ -89,7 +73,6 @@ class PaymentController {
         next(err);
     }
 }
-
     async history(req, res, next) {
 
         try {
