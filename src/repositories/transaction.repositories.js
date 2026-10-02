@@ -137,7 +137,27 @@ class TransactionRepository {
             [reference]
         );
         return rows[0] ?? null;
+
+
+
+
     }
+
+
+    /**
+     * ============================================
+     * verify Transaction by reference
+     * ============================================
+     */
+
+    async verifyTransaction(reference) {
+        const { rows } = await pool.query(
+            `${this.#baseSelect} WHERE t.reference = $1`,
+            [reference]
+        );
+        return rows[0] ?? null;
+    }
+
 
     /**
      * ============================================

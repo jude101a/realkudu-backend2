@@ -28,6 +28,7 @@ router.post(
 router.post(
 
     "/verify/:reference",
+    protect,
 
     PaymentController.verify
 

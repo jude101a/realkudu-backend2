@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import PaymentService from "../services/payment.js";
 import {sendNotification} from "../services/notification.service.js";
+import pool from "../config/db.js";
 
 class PaymentController {
 
@@ -47,33 +48,47 @@ class PaymentController {
     }
 
     async verify(req, res, next) {
+    try {
+        console.log(
+            "✅ Payment verify controller reached",
+            req.params.reference
+        );
 
-        try {
-             console.log("✅ Payment verify controller reached");
-            const transaction =
-
-                await PaymentService.verify(
-
-                    req.params.reference
-
+        const { rows } = await pool.query(
+                    `SELECT * FROM transactions WHERE reference = $1`,
+                    [req.params.reference]
                 );
-                
+                const transaction = rows[0];
+        console.log( "userId:", req.user.id, "transaction.buyer_id:", transaction.buyer_id );
 
-            return res.json({
 
-                success: true,
+       if( transaction.buyer_id === req.user.id ) {
 
-                data: transaction
+        const transaction =
+            await PaymentService.verify(
+                req.params.reference
+            );
 
+        return res.json({
+            success: true,
+            message: "Payment verified successfully.",
+            data: transaction
+        });} else {
+            return res.status(403).json({
+                success: false,
+                error: "Forbidden: You do not have access to this transaction."
             });
-
-        } catch (err) {
-
-            next(err);
-
         }
 
+    } catch (err) {
+        console.error(
+            "❌ Payment verification failed:",
+            err.message
+        );
+
+        next(err);
     }
+}
 
     async history(req, res, next) {
 

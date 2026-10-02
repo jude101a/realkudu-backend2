@@ -48,6 +48,15 @@ class PaymentService {
                     property
 
                 };
+            case "booking":
+
+                if (!bookingFee)
+                    throw new Error("Booking fee not configured.");
+                return {
+
+                    amount: bookingFee,
+                    property
+                }
 
             case "BALANCE":
 
@@ -58,7 +67,15 @@ class PaymentService {
                     property
 
                 };
+            case "balance":
 
+                return {
+
+                    amount: price - bookingFee,
+
+                    property
+
+                };
             case "PROPERTY_PURCHASE":
 
                 return {
@@ -68,9 +85,32 @@ class PaymentService {
                     property
 
                 };
+            case "PROPERTY_PURCHASE":
+                return {
 
+                    amount: price,
+
+                    property
+
+                };
+            case "property_purchase":
+                return {
+
+                    amount: price,
+
+                    property
+
+                };
             case "RENT":
 
+                return {
+
+                    amount: rentPrice,
+
+                    property
+
+                };
+            case "rent":
                 return {
 
                     amount: rentPrice,
@@ -110,6 +150,8 @@ class PaymentService {
          * Calculate everything here.
          */
 
+
+
         const {
 
             amount,
@@ -125,6 +167,7 @@ class PaymentService {
         );
 
         const buyer = await _findById(buyerId);
+
 
         if (!buyer)
             throw new Error("Buyer not found.");
@@ -143,7 +186,7 @@ class PaymentService {
 
             buyerId: buyer.id ?? buyer._id,
 
-            sellerId: property.seller_id ?? property.sellerId ?? property.seller,
+            sellerId: property.seller_id ?? property.sellerId ,
 
             agentId: property.agent_id ?? property.agentId ?? property.agent,
 
@@ -183,7 +226,10 @@ class PaymentService {
 
                 propertyId: property.property_id ?? property.propertyId ?? property.id,
 
-                paymentType
+                paymentType,
+                sellerId: property.seller_id ?? property.sellerId,
+                agentId: property.agent_id ?? property.agentId ?? property.agent,
+
 
             }
 
@@ -269,20 +315,25 @@ class PaymentService {
         }
 
         const verification =
+    await TransactionRepository.verifyTransaction(reference);
 
-            await TransactionRepository.verifyTransaction(reference);
+console.log(
+    "🔎 PAYSTACK VERIFICATION RESULT:",
+    verification
+);
 
-        if (!verification.status) {
+if (!verification) {
+    throw new Error(
+        "No verification response was returned from Paystack."
+    );
+}
 
-            throw new Error(
-
-                verification.message ||
-
-                "Verification failed."
-
-            );
-
-        }
+if (!verification.status) {
+    throw new Error(
+        verification.message ||
+        "Payment verification failed."
+    );
+}
 
         const gateway = verification.data;
 
@@ -294,7 +345,7 @@ class PaymentService {
 
             Number(gateway.amount) !==
 
-            transaction.amount * 100
+            Number(transaction.amount) * 100
 
         ) {
 
@@ -657,10 +708,10 @@ class PaymentService {
     async handleWebhookEvent(event) {
 
     const { event: eventType, data } = event;
-    const seller_id = data?.sellerId;
+    const seller_id = data?.metadata?.sellerId;
     const seller = await SellerModel.findById(seller_id);
-    const buyer = await findUserById(data?.buyerId);
-    const property = await PropertyModel.findById(data?.propertyId);
+    const buyer = await findUserById(data?.metadata?.buyerId);
+    const property = await PropertyModel.findById(data?.metadata?.propertyId);
     const transaction = await TransactionRepository.findByReference(data?.reference);
 
     info({ event: "WEBHOOK_RECEIVED", type: eventType, reference: data?.reference });
