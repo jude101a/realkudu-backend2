@@ -1,8 +1,8 @@
 import pool from "../config/db.js";
 
-const MIGRATION_NAME = "bootstrap_schema_v16";
+const MIGRATION_NAME = "bootstrap_schema_v19";
 // Bump checksum after schema adjustments so migration runs again when applied
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v20";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v21";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
@@ -1710,7 +1710,7 @@ await client.query(`
 ALTER TABLE transactions
 ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0);
 `);
-  
+ 
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS escrows (
@@ -1727,23 +1727,7 @@ ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purch
     );
   `);
 
-  if (await doesTableExist(client, "escrows") && await doesTableExist(client, "sellers")) {
-    await ensureForeignKeyConstraint(
-      client,
-      "escrows",
-      "seller_id",
-      "fk_escrows_seller_id_sellers",
-      `FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE SET NULL`,
-      (definition) => {
-        const normalized = String(definition || "").toLowerCase();
-        return (
-          normalized.includes("foreign key (seller_id)") &&
-          normalized.includes("references sellers(id)") &&
-          normalized.includes("on delete set null")
-        );
-      }
-    );
-  }
+  
 
   await ensureTableColumns(client, "escrows", ESCROWS_TABLE_COLUMNS);
 
