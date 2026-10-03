@@ -334,6 +334,7 @@ if (!verification.status) {
 
         const gateway = verification;
 
+
         /**
          * Verify amount
          */
@@ -341,7 +342,7 @@ if (!verification.status) {
 
             Number(gateway.data.amount) !==
 
-            Number(transaction.amount) * 100
+            ((Number(transaction.amount)* 100 +  Number(gateway.data.fees)))
 
         ) {
 
