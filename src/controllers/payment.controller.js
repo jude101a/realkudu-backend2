@@ -140,34 +140,122 @@ class PaymentController {
     try {
         const secretKey = process.env.PAYSTACK_SECRET_KEY;
 
-        // req.body is a raw Buffer here because of express.raw()
-        const hash = crypto
-            .createHmac("sha512", secretKey)
-            .update(req.body)
-            .digest("hex");
+        const signature =
+            req.headers["x-paystack-signature"];
 
-        const signature = req.headers["x-paystack-signature"];
+        console.log("====================================");
+        console.log("🔥 PAYSTACK WEBHOOK RECEIVED");
+        console.log("Signature:", signature);
+        console.log(
+            "Raw body exists:",
+            !!req.rawBody
+        );
+        console.log(
+            "Raw body is Buffer:",
+            Buffer.isBuffer(req.rawBody)
+        );
+        console.log("====================================");
 
-        if (hash !== signature) {
-            console.warn("⚠️ Invalid Paystack webhook signature");
-            return res.status(401).send("Invalid signature");
+        if (!secretKey) {
+            console.error(
+                "❌ PAYSTACK_SECRET_KEY is not configured"
+            );
+
+            return res
+                .status(500)
+                .send("Server configuration error");
         }
 
-        // Now safe to parse
-        const event = JSON.parse(req.body.toString());
+        if (!req.rawBody) {
+            console.error(
+                "❌ Raw request body is missing"
+            );
 
-        // Respond 200 immediately — Paystack requires fast ack
+            return res
+                .status(400)
+                .send("Raw body missing");
+        }
+
+        /**
+         * Verify Paystack signature
+         */
+        const hash = crypto
+            .createHmac("sha512", secretKey)
+            .update(req.rawBody)
+            .digest("hex");
+
+        if (hash !== signature) {
+            console.warn(
+                "⚠️ Invalid Paystack webhook signature"
+            );
+
+            return res
+                .status(401)
+                .send("Invalid signature");
+        }
+
+        console.log(
+            "✅ Paystack webhook signature verified"
+        );
+
+        /**
+         * express.json() has already parsed this
+         * into an object.
+         */
+        const event = req.body;
+
+        console.log(
+            "🔥 PAYSTACK EVENT:",
+            event.event
+        );
+
+        console.log(
+            "🔥 PAYSTACK REFERENCE:",
+            event.data?.reference
+        );
+
+        console.log(
+            "🔥 PAYSTACK STATUS:",
+            event.data?.status
+        );
+
+        /**
+         * Acknowledge Paystack immediately.
+         */
         res.status(200).send("OK");
 
-        // Process asynchronously after responding
-        await PaymentService.handleWebhookEvent(event);
+        /**
+         * Process event asynchronously.
+         */
+        try {
+
+            await PaymentService.handleWebhookEvent(
+                event
+            );
+
+            console.log(
+                "✅ Webhook business logic completed"
+            );
+
+        } catch (error) {
+
+            console.error(
+                "❌ Webhook business logic failed:",
+                error
+            );
+        }
 
     } catch (err) {
-        console.error("Webhook processing error:", err);
-        // Still return 200 if signature was valid but processing failed,
-        // so Paystack doesn't endlessly retry — log and fix manually instead
+
+        console.error(
+            "❌ Webhook processing error:",
+            err
+        );
+
         if (!res.headersSent) {
-            res.status(200).send("OK");
+            return res
+                .status(500)
+                .send("Webhook processing error");
         }
     }
 }
