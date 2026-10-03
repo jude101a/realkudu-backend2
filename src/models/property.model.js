@@ -316,14 +316,9 @@ class PropertyModel {
     return rows[0] || null;
   }
 
-  static async findById(propertyId, sellerId = null) {
+  static async findById(propertyId) {
     const values = [propertyId];
     let sql = `SELECT * FROM ${TABLE} WHERE property_id = $1 AND deleted_at IS NULL`;
-
-    if (sellerId) {
-      sql += ` AND seller_id = $2`;
-      values.push(sellerId);
-    }
 
     sql += ` LIMIT 1`;
 

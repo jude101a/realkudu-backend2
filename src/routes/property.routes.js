@@ -71,7 +71,7 @@ router.post("/sellerProperties/:sellerId", getBySellerAndPropertyType);
 router.post("/sellerEstateProperties/:sellerId/:estateId/:propertyType", getEstateProperties);
 router.post("/sellerNonEstateProperties/:sellerId/:propertyType", getNonEstateProperties);
 
-router.get("/getById/:propertyId/:sellerId", getPropertyById); // always last
+router.get("/getById/:propertyId", getPropertyById); // always last
 /* ================= PROTECTED WRITE ROUTES ================= */
 protectedRouter.use(protect);
 router.delete("/deleteProperty/:sellerId/:propertyId",validate({params: propertyIdParamSchema}) , deleteProperty)

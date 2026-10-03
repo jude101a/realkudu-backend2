@@ -219,11 +219,10 @@ export const deleteProperty = wrap(async (req, res) => {
 });
 
 export const getPropertyById = wrap(async (req, res) => {
-  const { propertyId, sellerId } = req.params;
+  const { propertyId} = req.params;
   if (!validateUuidField(res, propertyId, "propertyId")) return;
-  if (!validateUuidField(res, sellerId, "sellerId", false)) return;
 
-  const property = await PropertyModel.findById(propertyId, sellerId || null);
+  const property = await PropertyModel.findById(propertyId);
   if (!property) {
     return fail(res, 404, "Property not found", "NOT_FOUND");
   }
