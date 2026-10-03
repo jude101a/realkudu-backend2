@@ -1,4 +1,5 @@
 import EscrowRepository from "../repositories/escrow.repository.js";
+import SellerModel from "../models/seller.model.js";
 import pool from "../config/db.js";
 import WalletService from "./wallet.service.js";
 
@@ -67,6 +68,44 @@ export class EscrowService {
     return this.transferService;
   }
 
+  async resolveSellerId(transaction = {}, fallbackSellerId = null) {
+    const directSellerId =
+      fallbackSellerId ??
+      getColumn(transaction, "sellerId", "seller_id") ??
+      getColumn(transaction?.seller, "id") ??
+      null;
+
+    if (directSellerId) {
+      const directSeller = await SellerModel.findById(directSellerId);
+      const directRow = directSeller?.rows?.[0] ?? directSeller;
+      if (directRow?.id) {
+        return directRow.id;
+      }
+
+      const sellerByUserId = await SellerModel.findByUserId(directSellerId);
+      const byUserRow = sellerByUserId?.rows?.[0] ?? sellerByUserId;
+      if (byUserRow?.id) {
+        return byUserRow.id;
+      }
+
+      return directSellerId;
+    }
+
+    const userId =
+      getColumn(transaction?.seller, "userId", "user_id") ??
+      transaction?.sellerUserId ??
+      transaction?.user_id ??
+      null;
+
+    if (!userId) {
+      return null;
+    }
+
+    const sellerByUserId = await SellerModel.findByUserId(userId);
+    const row = sellerByUserId?.rows?.[0] ?? sellerByUserId;
+    return row?.id ?? null;
+  }
+
   async createFromTransaction(transaction) {
     const payload = normalizeTransactionPayload(transaction);
 
@@ -74,8 +113,11 @@ export class EscrowService {
       throw new Error("transactionId is required to create escrow");
     }
 
+    const resolvedSellerId = await this.resolveSellerId(transaction, payload.sellerId);
+
     return this.escrowRepository.create({
       ...payload,
+      sellerId: resolvedSellerId,
       status: ESCROW_STATUS.PENDING,
     });
   }

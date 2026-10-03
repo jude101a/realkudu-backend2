@@ -1718,7 +1718,7 @@ ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purch
       transaction_id UUID NOT NULL UNIQUE REFERENCES transactions(id) ON DELETE CASCADE,
       property_id UUID REFERENCES property(property_id) ON DELETE SET NULL,
       buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      seller_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
       agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
       status escrow_status NOT NULL DEFAULT 'PENDING',
       released_at TIMESTAMPTZ,
@@ -1726,6 +1726,25 @@ ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purch
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  if (await doesTableExist(client, "escrows") && await doesTableExist(client, "sellers")) {
+    await ensureForeignKeyConstraint(
+      client,
+      "escrows",
+      "seller_id",
+      "fk_escrows_seller_id_sellers",
+      `FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE SET NULL`,
+      (definition) => {
+        const normalized = String(definition || "").toLowerCase();
+        return (
+          normalized.includes("foreign key (seller_id)") &&
+          normalized.includes("references sellers(id)") &&
+          normalized.includes("on delete set null")
+        );
+      }
+    );
+  }
+
   await ensureTableColumns(client, "escrows", ESCROWS_TABLE_COLUMNS);
 
   await client.query(`
