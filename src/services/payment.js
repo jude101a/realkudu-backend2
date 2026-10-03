@@ -822,6 +822,43 @@ if (!verification.status) {
         }
     }
 
+    async settleSellerPayout({ escrow, paidTransaction = {}, sellerId = null } = {}) {
+        if (!escrow?.id) {
+            return null;
+        }
+
+        const normalizedSellerId = sellerId ?? paidTransaction?.seller_id ?? escrow?.seller_id ?? escrow?.seller?.id ?? escrow?.seller?.user_id ?? null;
+        const transactionAmount = Number(
+            paidTransaction?.amount ?? paidTransaction?.total_amount ?? escrow?.transaction?.amount ?? escrow?.amount ?? 0
+        );
+
+        if (!normalizedSellerId || transactionAmount <= 0) {
+            info({
+                event: "SELLER_PAYOUT_SKIPPED",
+                escrowId: escrow.id,
+                reason: !normalizedSellerId ? "missing_seller" : "zero_amount",
+            });
+            return escrow;
+        }
+
+        const status = String(escrow.status ?? "").toUpperCase();
+
+        if (status === "PENDING") {
+            await EscrowService.markHeld(escrow.id);
+        }
+
+        const releasedEscrow = await EscrowService.approveBuyer(escrow.id);
+
+        info({
+            event: "SELLER_PAYOUT_RELEASED",
+            reference: paidTransaction?.reference ?? null,
+            escrowId: escrow.id,
+            amount: transactionAmount,
+        });
+
+        return releasedEscrow ?? escrow;
+    }
+
     async handleWebhookEvent(event) {
 
         const { event: eventType, data = {} } = event ?? {};
@@ -893,6 +930,12 @@ if (!verification.status) {
                     event: "ESCROW_CREATED_AFTER_PAYMENT",
                     reference: data.reference,
                     escrowId: escrow?.id,
+                });
+
+                await this.settleSellerPayout({
+                    escrow,
+                    paidTransaction,
+                    sellerId: seller?.id ?? seller?.user_id ?? seller?.userId ?? null,
                 });
 
                 const paymentType = String(

@@ -328,19 +328,14 @@ export const registerCompanySeller = withErrorHandling(async (req, res) => {
   // already-sent success response above.
   try {
     await sendNotification({
-      user: {
-        id: req.userId,
-        email: req.sellerEmail,
-      },
+      userId: req.userId,
       title: "Registration Successful",
-      message:
-        "Welcome onboard! Your company seller account has been created successfully.",
+      body: "Welcome onboard! Your company seller account has been created successfully.",
       channels: ["PUSH", "EMAIL", "IN_APP"],
       data: {},
     });
   } catch (error) {
     logger.error("Failed to send seller registration notification", error);
-    // TODO: replace with your logger, e.g. logger.error("seller notification failed", error)
     console.error("Failed to send seller registration notification:", error);
   }
 });
@@ -441,20 +436,14 @@ export const updateBusinessProfile = withErrorHandling(async (req, res) => {
   if (!result.rowCount) return fail(res, 404, "Seller not found", "SELLER_NOT_FOUND");
   try {
     await sendNotification({
-    user: {
-      id: req.params.id,
-      email: req.sellerEmail,
-    },
-    title: "Update Alert",
-    message: "Your business profile has been updated successfully.",
-    channels: ["PUSH","EMAIL", "IN_APP"],
-    data: {
-    
-    },
-  });
-  
+      userId: req.params.id,
+      title: "Update Alert",
+      body: "Your business profile has been updated successfully.",
+      channels: ["PUSH", "EMAIL", "IN_APP"],
+      data: {},
+    });
   } catch (error) {
-    
+    console.error("[seller.controller] profile update notification failed", { userId: req.params.id, error: error?.message || error });
   }
   return ok(res, { message: "Profile updated successfully", data: sanitizeSeller(result.rows[0]) });
 });

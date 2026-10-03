@@ -195,23 +195,18 @@ export const login = async (req, res, next) => {
       jwtSecret,
       { expiresIn: JWT_EXPIRES_IN }
     );
-try {
-  await sendNotification({
-  user: {
-    id: user.id,
-    email: user.email,
-  },
-  title: "Login Alert",
-  message: "Welcome back! You have successfully logged in to your account.",
-  channels: ["PUSH",],
-  data: {
-  
-  },
-});
 
-} catch (error) {
-  
-}
+    try {
+      await sendNotification({
+        userId: user.id,
+        title: "Login Alert",
+        body: "Welcome back! You have successfully logged in to your account.",
+        channels: ["PUSH"],
+        data: {},
+      });
+    } catch (error) {
+      console.error("[user.controller] login alert failed", { userId: user?.id, error: error?.message || error });
+    }
     
     return sendSuccess(res, 200, {
       token,
@@ -408,13 +403,15 @@ export const socialLogin = async (req, res, next) => {
 
     try {
       await sendNotification({
-        user: { id: user.id, email: user.email },
+        userId: user.id,
         title: "Login Alert",
-        message: `Logged in via ${provider}`,
+        body: `Logged in via ${provider}`,
         channels: ["PUSH"],
         data: {},
       });
-    } catch (e) {}
+    } catch (e) {
+      console.error("[user.controller] social login alert failed", { userId: user?.id, error: e?.message || e });
+    }
 
     return sendSuccess(res, 200, { token: jwtToken, user: sanitizeUser(user) });
   } catch (err) {

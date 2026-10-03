@@ -44,18 +44,47 @@ import { pushQueue, emailQueue } from '../queues/notification.queue.js';
 import {saveNotification} from '../models/notification.model.js';
 
 
+export function normalizeNotificationInput(input = {}) {
+  const userId = input.userId ?? input.user?.id ?? null;
+  const body = input.body ?? input.message ?? "";
+  const title = input.title ?? "";
+  const channels = Array.isArray(input.channels) && input.channels.length
+    ? input.channels
+    : ["PUSH"];
+
+  return {
+    ...input,
+    userId,
+    body,
+    title,
+    channels,
+  };
+}
+
 // Controller-friendly API used across the app
-export async function sendNotification({
-  email,
-  jobName,
-  userName,
-  userId,
-  title,
-  body,
-  channels = ["PUSH"],
-  data = {},
-}) {
+export async function sendNotification(input = {}) {
+  const normalized = normalizeNotificationInput(input);
+  const {
+    email,
+    jobName,
+    userName,
+    userId,
+    title,
+    body,
+    channels,
+    data = {},
+  } = normalized;
+
   const jobs = [];
+
+  if (!userId) {
+    console.warn("[notification.service] Ignored notification without userId", {
+      title,
+      body,
+      input,
+    });
+    return [];
+  }
 
   const emailPayload = {
     email,
@@ -65,7 +94,6 @@ export async function sendNotification({
   };
 
   try {
-    // 1. Save notification to database
     const notification = await saveNotification({
       userId,
       title,
@@ -73,13 +101,9 @@ export async function sendNotification({
       data,
     });
 
-    // 2. Process requested channels
     for (const ch of channels) {
       const upper = String(ch || "").toUpperCase();
 
-      // -------------------------
-      // PUSH
-      // -------------------------
       if (upper === "PUSH") {
         if (!pushQueue) {
           console.warn(
@@ -99,9 +123,6 @@ export async function sendNotification({
         );
       }
 
-      // -------------------------
-      // EMAIL
-      // -------------------------
       else if (upper === "EMAIL") {
         if (!emailQueue) {
           console.warn(
@@ -115,9 +136,6 @@ export async function sendNotification({
         );
       }
 
-      // -------------------------
-      // UNKNOWN CHANNEL
-      // -------------------------
       else {
         console.warn(
           `[notification.service] Unknown notification channel: ${ch}`
