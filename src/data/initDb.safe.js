@@ -1306,10 +1306,19 @@ async function ensurePropertyTableHotfix(client) {
       payment_duration VARCHAR(50),
       eligibility TEXT DEFAULT '',
       sold_at TIMESTAMPTZ,
+      initial_quantity NUMERIC(12,2) DEFAULT 0 CHECK (initial_quantity >= 0),
+      available_quantity NUMERIC(12,2) DEFAULT 0 CHECK (available_quantity >= 0),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       deleted_at TIMESTAMPTZ
     );
+  `);
+  await client.query(`
+    ALTER TABLE property
+    ADD COLUMN IF NOT EXISTS property_subtype TEXT DEFAULT NULL;
+    ADD COLUMN IF NOT EXISTS initial_quantity NUMERIC(12,2) DEFAULT 0 CHECK (initial_quantity >= 0);
+    ADD COLUMN IF NOT EXISTS available_quantity NUMERIC(12,2) DEFAULT 0 CHECK (available_quantity >= 0);
+
   `);
   await client.query(`
   ALTER TABLE tenant_meta
@@ -1618,6 +1627,7 @@ DROP CONSTRAINT IF EXISTS property_orders_seller_id_fkey`);
     -- Property involved
     property_id UUID REFERENCES property(property_id)
         ON DELETE SET NULL,
+    purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0),
 
     -- Participants
     buyer_id UUID REFERENCES users(id)
@@ -1695,6 +1705,10 @@ ADD CONSTRAINT transactions_seller_id_fkey
 FOREIGN KEY (seller_id)
 REFERENCES sellers(id)
 ON DELETE SET NULL;
+`);
+await client.query(`
+ALTER TABLE transactions
+ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0);
 `);
   
 

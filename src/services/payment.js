@@ -4,10 +4,13 @@ import TransactionRepository from "../repositories/transaction.repositories.js";
 import PropertyModel from "../models/property.model.js";
 import { findUserById } from "../models/user.models.js";
 import SellerModel from "../models/seller.model.js";
+import OrderModel from "../models/order.model.js";
 
 import { generateReference } from "../utils/reference.js";
 
 import logger from "../config/logger.js";
+import { sendNotification } from "../services/notification.service.js";
+import EscrowService from "./escrow.service.js";
 
 const info = logger.info.bind(logger);
 const _findById = findUserById;
@@ -652,7 +655,7 @@ if (!verification.status) {
 
         if (amount) {
 
-            payload.amount = amount * 100;
+            payload.requested_amount = amount * 100;
 
         }
 
@@ -700,129 +703,279 @@ if (!verification.status) {
 
     }
 
+    normalizeSeller(sellerResult) {
+        if (!sellerResult) return null;
+        if (sellerResult.rows && Array.isArray(sellerResult.rows)) {
+            return sellerResult.rows[0] ?? null;
+        }
+        return sellerResult;
+    }
 
+    normalizePropertyType(value) {
+        return String(value ?? "").trim().toLowerCase();
+    }
+
+    async createPropertyPurchaseOrder({ property, buyer, seller, paidTransaction, data }) {
+        const propertyId = property?.property_id ?? property?.id ?? property?.propertyId;
+        const buyerId = buyer?.id ?? buyer?._id;
+        const sellerId = seller?.id ?? seller?.user_id ?? seller?.userId ?? property?.seller_id ?? property?.sellerId;
+        const propertyType = this.normalizePropertyType(
+            data?.propertyType ?? property?.property_type ?? property?.propertyType ?? "unknown"
+        );
+        const amount = Number(paidTransaction?.amount ?? data?.amount ?? 0);
+        const reference = paidTransaction?.reference ?? data?.reference;
+
+        if (!propertyId || !buyerId || !sellerId) {
+            return null;
+        }
+
+        const existingOrders = await OrderModel.findByPropertyId(propertyId);
+        const existingOrder = existingOrders.find((order) =>
+            String(order.buyer_id ?? order.buyerId) === String(buyerId)
+        );
+
+        if (existingOrder) {
+            const result = await OrderModel.advanceStep(existingOrder.order_id, "payment_received", {
+                reference,
+                amount,
+                paymentType: data?.paymentType ?? paidTransaction?.payment_type ?? "PROPERTY_PURCHASE",
+            });
+            return result?.order ?? result ?? null;
+        }
+
+        const result = await OrderModel.create(
+            {
+                buyerId,
+                sellerId,
+                propertyId,
+                propertyType,
+                status: "paid",
+                paymentType: String(data?.paymentType ?? paidTransaction?.payment_type ?? "PROPERTY_PURCHASE").toUpperCase(),
+                bookingFee: 0,
+                agreedAmount: amount,
+                amountPaid: amount,
+                currency: paidTransaction?.currency ?? "NGN",
+                inspectionRequired: true,
+                inspectionCompleted: false,
+                dueDiligenceCompleted: false,
+                agreementSigned: false,
+                governmentConsentRequired: true,
+                notes: `Payment received for ${property?.name ?? "property"} via Paystack.`,
+                purchaseStep: "payment_received",
+                funnelStep: "payment_received",
+                version: 0,
+            },
+            {
+                step: "payment_received",
+                reference,
+                amount,
+            }
+        );
+
+        return result?.order ?? result ?? null;
+    }
+
+    async notifyStakeholders({ property, buyer, seller, paidTransaction, data }) {
+        const propertyName = property?.name ?? property?.title ?? "this property";
+        const buyerId = buyer?.id ?? buyer?._id;
+        const sellerUserId = seller?.user_id ?? seller?.userId ?? seller?.id;
+        const buyerEmail = buyer?.email ?? null;
+        const sellerEmail = seller?.business_email ?? seller?.email ?? null;
+        const reference = paidTransaction?.reference ?? data?.reference;
+
+        if (buyerId) {
+            await sendNotification({
+                title: "Payment Successful",
+                body: `Your payment for ${propertyName} has been received successfully. Reference: ${reference}. Find the details in your transaction history.`,
+                channels: ["EMAIL", "PUSH"],
+                data: {
+                    reference,
+                    property,
+                    transaction: paidTransaction,
+                    buyer,
+                    seller,
+                },
+                email: buyerEmail,
+                jobName: "sendPaymentEmail",
+                userName: buyer?.first_name ?? buyer?.name ?? "Buyer",
+                userId: buyerId,
+            });
+        }
+
+        if (sellerUserId) {
+            await sendNotification({
+                title: "Payment Received",
+                body: `A payment for ${propertyName} has been received. Reference: ${reference}. Find the details in your transaction history.`,
+                channels: ["EMAIL", "PUSH"],
+                data: {
+                    reference,
+                    property,
+                    transaction: paidTransaction,
+                    buyer,
+                    seller,
+                },
+                email: sellerEmail,
+                jobName: "sendPaymentEmail",
+                userName: seller?.business_name ?? seller?.name ?? "Seller",
+                userId: sellerUserId,
+            });
+        }
+    }
 
     async handleWebhookEvent(event) {
 
-    const { event: eventType, data } = event;
-    const seller_id = data?.metadata?.sellerId;
-    const seller = await SellerModel.findById(seller_id);
-    const buyer = await findUserById(data?.metadata?.buyerId);
-    const property = await PropertyModel.findById(data?.metadata?.propertyId);
-    const transaction = await TransactionRepository.findByReference(data?.reference);
+        const { event: eventType, data = {} } = event ?? {};
+        const sellerId = data?.metadata?.sellerId ?? data?.sellerId ?? null;
+        const buyerId = data?.metadata?.buyerId ?? data?.buyerId ?? null;
+        const propertyId = data?.metadata?.propertyId ?? data?.propertyId ?? null;
 
-    info({ event: "WEBHOOK_RECEIVED", type: eventType, reference: data?.reference });
+        const seller = sellerId ? this.normalizeSeller(await SellerModel.findById(sellerId)) : null;
+        const buyer = buyerId ? await findUserById(buyerId) : null;
+        const property = propertyId ? await PropertyModel.findById(propertyId) : null;
+        const transaction = data?.reference ? await TransactionRepository.findByReference(data.reference) : null;
 
-    switch (eventType) {
+        info({ event: "WEBHOOK_RECEIVED", type: eventType, reference: data?.reference });
 
-        case "charge.success": {
+        switch (eventType) {
 
-            const transaction = await TransactionRepository.findByReference(data.reference);
+            case "charge.success": {
 
-            if (!transaction) {
-                info({ event: "WEBHOOK_UNKNOWN_REFERENCE", reference: data.reference });
-                return;
+                const currentTransaction = transaction ?? (data?.reference ? await TransactionRepository.findByReference(data.reference) : null);
+
+                if (!currentTransaction) {
+                    info({ event: "WEBHOOK_UNKNOWN_REFERENCE", reference: data.reference });
+                    return;
+                }
+
+                if (currentTransaction.status === "SUCCESS") {
+                    info({ event: "WEBHOOK_ALREADY_PROCESSED", reference: data.reference });
+                    return;
+                }
+
+                const expectedKobo = Number(data?.requested_amount ?? data?.amount ?? 0);
+                const amountMatches = expectedKobo === Number(currentTransaction.amount ?? 0) * 100;
+
+                if (!amountMatches) {
+                    info({ event: "WEBHOOK_AMOUNT_MISMATCH", reference: data.reference });
+                    await TransactionRepository.markFailed(data.reference, data);
+                    await TransactionRepository.recordFailureReason(data.reference, "Amount mismatch");
+                    await PaymentService.refund(data.reference, currentTransaction.amount);
+                    if (property && buyer) {
+                        await sendNotification({
+                            title: "Payment Failed",
+                            body: `Your payment for ${property.name ?? "this property"} failed due to an amount mismatch. Reference: ${data.reference}. Please contact support.`,
+                            channels: ["EMAIL", "PUSH"],
+                            data: { reference: data.reference, property, transaction: currentTransaction },
+                            email: buyer.email,
+                            jobName: "sendPaymentEmail",
+                            userName: buyer.first_name ?? buyer.name ?? "Buyer",
+                            userId: buyer.id ?? buyer._id,
+                        });
+                    }
+                    return;
+                }
+
+                const successfulTransaction = await TransactionRepository.markSuccessful(data.reference, data);
+
+                info({ event: "PAYMENT_SUCCESS_WEBHOOK", reference: data.reference });
+
+                const paidTransaction = successfulTransaction ?? currentTransaction;
+                const transactionId = paidTransaction.id ?? paidTransaction.transaction_id;
+                let escrow = transactionId
+                    ? await EscrowService.findByTransaction(transactionId)
+                    : null;
+
+                if (!escrow) {
+                    escrow = await EscrowService.createFromTransaction(paidTransaction);
+                }
+
+                info({
+                    event: "ESCROW_CREATED_AFTER_PAYMENT",
+                    reference: data.reference,
+                    escrowId: escrow?.id,
+                });
+
+                const paymentType = String(
+                    data?.paymentType ?? data?.metadata?.paymentType ?? paidTransaction?.payment_type ?? "PROPERTY_PURCHASE"
+                ).toUpperCase();
+                const propertyType = this.normalizePropertyType(
+                    data?.propertyType ?? property?.property_type ?? property?.propertyType ?? "unknown"
+                );
+
+                if (paymentType === "PROPERTY_PURCHASE") {
+                    if (propertyType === "house") {
+                        if (property) {
+                            await PropertyModel.update(property.id ?? property.property_id, {
+                                status: property.is_estate ? "available" : "unavailable",
+                                soldOut: property.is_estate ? false : true,
+                                soldAt: new Date(),
+                                buyerId: buyer?.id ?? buyer?._id ?? null,
+                            });
+                        }
+                    } else if (propertyType === "land") {
+                        if (property) {
+                            const availableQuantity = Number(property.available_quantity ?? property.availableQuantity ?? 0);
+                            const purchaseQuantity = Number(data?.purchase_quantity ?? data?.purchaseQuantity ?? 1);
+                            const updatedQuantity = Math.max(availableQuantity - purchaseQuantity, 0);
+                            await PropertyModel.update(property.id ?? property.property_id, {
+                                availableQuantity: updatedQuantity,
+                                soldOut: updatedQuantity <= 0.5,
+                                soldAt: updatedQuantity <= 0.5 ? new Date() : null,
+                            });
+                        }
+                    } else if (propertyType === "apartment") {
+                        if (property) {
+                            await PropertyModel.update(property.id ?? property.property_id, {
+                                status: "unavailable",
+                                soldOut: true,
+                                soldAt: new Date(),
+                                buyerId: buyer?.id ?? buyer?._id ?? null,
+                            });
+                        }
+                    }
+
+                    await this.createPropertyPurchaseOrder({
+                        property,
+                        buyer,
+                        seller,
+                        paidTransaction,
+                        data,
+                    });
+                }
+
+                await this.notifyStakeholders({
+                    property,
+                    buyer,
+                    seller,
+                    paidTransaction,
+                    data,
+                });
+
+                break;
             }
 
-            // Idempotency check — don't reprocess if already marked SUCCESS
-            if (transaction.status === "SUCCESS") {
-                info({ event: "WEBHOOK_ALREADY_PROCESSED", reference: data.reference });
-                return;
-            }
+            case "charge.failed": {
 
-            // Verify amount matches (defense against tampering)
-            if (Number(data.amount) !== Number(transaction.amount) * 100) {
-                info({ event: "WEBHOOK_AMOUNT_MISMATCH", reference: data.reference });
                 await TransactionRepository.markFailed(data.reference, data);
-                return;
+                info({ event: "PAYMENT_FAILED_WEBHOOK", reference: data.reference });
+                break;
+
             }
 
-            const successfulTransaction = await TransactionRepository.markSuccessful(data.reference, data);
+            case "transfer.success":
+            case "transfer.failed":
+            case "transfer.reversed": {
 
-            info({ event: "PAYMENT_SUCCESS_WEBHOOK", reference: data.reference });
+                info({ event: "TRANSFER_WEBHOOK", type: eventType, reference: data.reference });
+                break;
 
-            const paidTransaction = successfulTransaction ?? transaction;
-            const transactionId = paidTransaction.id ?? paidTransaction.transaction_id;
-            let escrow = transactionId
-                ? await EscrowService.findByTransaction(transactionId)
-                : null;
-
-            if (!escrow) {
-                escrow = await EscrowService.createFromTransaction(paidTransaction);
             }
 
-            info({
-                event: "ESCROW_CREATED_AFTER_PAYMENT",
-                reference: data.reference,
-                escrowId: escrow?.id,
-            });
-
-
-            await sendNotification({
-        title: "Payment Successful",
-        body: `Your payment for ${property.name} has been received successfully.\n Reference: ${data.reference}, find the details in your transaction history.`,
-        channels: ["EMAIL", "PUSH"],
-        data: {"reference": data.reference,
-             "property": property,
-            "transaction": paidTransaction,
-            "buyer": buyer,
-            "seller": seller,},
-        email: buyer.email,
-        jobName: "sendPaymentEmail",
-        userName: buyer.first_name,
-        userId: buyer.id,
-      });
-
-      await sendNotification({
-        title: "Payment Received",
-        body: `A payment for ${property.name} has been received.\n Reference: ${data.reference},\nThis can be for any stage of the process. Find the details in your transaction history.`,
-        channels: ["EMAIL", "PUSH"],
-        data: {"reference": data.reference,
-             "property": property,
-            "transaction": paidTransaction,
-            "buyer": buyer,
-            "seller": seller,},
-        email: seller.email,
-        jobName: "sendPaymentEmail",
-        userName: seller.first_name,
-        userId: seller.id,
-      });
-      
-      
-            break;
+            default:
+                info({ event: "WEBHOOK_UNHANDLED_EVENT", type: eventType });
         }
 
-        
-
-        case "charge.failed": {
-
-            await TransactionRepository.markFailed(data.reference, data);
-            info({ event: "PAYMENT_FAILED_WEBHOOK", reference: data.reference });
-            break;
-
-        }
-
-        case "transfer.success":
-        case "transfer.failed":
-        case "transfer.reversed": {
-
-            // Handle transfer webhooks separately if you're paying out sellers
-            info({ event: "TRANSFER_WEBHOOK", type: eventType, reference: data.reference });
-            break;
-
-        }
-
-        default:
-            info({ event: "WEBHOOK_UNHANDLED_EVENT", type: eventType });
     }
-
 }
-
-}
-
-// webhook handler
-
-
-
 
 export default new PaymentService();

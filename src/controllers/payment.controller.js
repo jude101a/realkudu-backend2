@@ -50,8 +50,7 @@ class PaymentController {
     async verify(req, res, next) {
     try {
         console.log(
-            "✅ Payment verify controller reached:",
-            req.params.reference
+            "✅ Payment verify controller reached:"
         );
 
         const transaction =

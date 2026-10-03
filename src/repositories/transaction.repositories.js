@@ -161,8 +161,7 @@ class TransactionRepository {
                { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
                 "Content-Type": "application/json" },
                  timeout: 15000 } ); 
-                 console.log( "🔎 PAYSTACK VERIFY RESPONSE:",
-                     JSON.stringify(response.data, null, 2) );
+                 
                       return response.data;
                      }
                       catch (error) { console.error( "❌ PAYSTACK VERIFICATION ERROR:" );
@@ -184,6 +183,23 @@ class TransactionRepository {
         return rows[0] ?? null;
     }
 
+
+      /**
+     * ============================================
+     * Record Failure reason
+     * ============================================
+     */
+
+    async recordFailureReason(gatewayReference, reason) {
+        const { rows } = await pool.query(
+            `UPDATE transactions
+             SET failure_reason = $2
+             WHERE gateway_reference = $1
+             RETURNING *`,
+            [gatewayReference, reason]
+        );
+        return rows[0] ?? null;
+    }
     /**
      * ============================================
      * UPDATE STATUS
