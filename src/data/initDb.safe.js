@@ -1315,15 +1315,13 @@ async function ensurePropertyTableHotfix(client) {
   `);
   await client.query(`
     ALTER TABLE property
-    ADD COLUMN IF NOT EXISTS property_subtype TEXT DEFAULT NULL;
-    ADD COLUMN IF NOT EXISTS initial_quantity NUMERIC(12,2) DEFAULT 0 CHECK (initial_quantity >= 0);
+    ADD COLUMN IF NOT EXISTS initial_quantity NUMERIC(12,2) DEFAULT 0 CHECK (initial_quantity >= 0),
     ADD COLUMN IF NOT EXISTS available_quantity NUMERIC(12,2) DEFAULT 0 CHECK (available_quantity >= 0);
-
   `);
   await client.query(`
-  ALTER TABLE tenant_meta
-  ADD COLUMN IF NOT EXISTS property_subtype TEXT DEFAULT NULL;
-`);
+    ALTER TABLE tenant_meta
+    ADD COLUMN IF NOT EXISTS property_subtype TEXT DEFAULT NULL;
+  `);
 
 
   await ensureTableColumns(client, "property", PROPERTY_TABLE_COLUMNS);
@@ -1442,8 +1440,110 @@ async function ensureAdminColumns(client) {
   }
 }
 
+async function createEscrowsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS escrows (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      transaction_id UUID NOT NULL UNIQUE REFERENCES transactions(id) ON DELETE CASCADE,
+      property_id UUID REFERENCES property(property_id) ON DELETE SET NULL,
+      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
+      agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      status escrow_status NOT NULL DEFAULT 'PENDING',
+      released_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  if (await doesTableExist(client, "escrows") && await doesTableExist(client, "sellers")) {
+    await ensureForeignKeyConstraint(
+      client,
+      "escrows",
+      "seller_id",
+      "fk_escrows_seller_id_sellers",
+      `FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE SET NULL`,
+      (definition) => {
+        const normalized = String(definition || "").toLowerCase();
+        return (
+          normalized.includes("foreign key (seller_id)") &&
+          normalized.includes("references sellers(id)") &&
+          normalized.includes("on delete set null")
+        );
+      }
+    );
+  }
+
+  await ensureTableColumns(client, "escrows", ESCROWS_TABLE_COLUMNS);
+}
+
+async function repairEscrowsTable(client) {
+  if (!(await doesTableExist(client, "escrows"))) {
+    return;
+  }
+
+  const { rows } = await client.query(
+    `
+      SELECT conname, pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint
+      WHERE conrelid = 'escrows'::regclass
+        AND contype = 'f';
+    `
+  );
+
+  const hasBadSellerForeignKey = rows.some((row) => {
+    const definition = String(row.definition || "").toLowerCase();
+    return definition.includes("foreign key (seller_id)") && definition.includes("references users(id)");
+  });
+
+  if (hasBadSellerForeignKey) {
+    console.log("[DB] Repairing escrows table: dropping stale seller foreign key reference to users(id).");
+    await client.query(`DROP TABLE IF EXISTS escrows CASCADE;`);
+    await createEscrowsTable(client);
+  }
+}
+
+async function repairSellerForeignKeyTable(client, tableName, constraintName, columnName) {
+  if (!(await doesTableExist(client, tableName))) {
+    return;
+  }
+
+  const { rows } = await client.query(
+    `
+      SELECT conname, pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint
+      WHERE conrelid = $1::regclass
+        AND contype = 'f'
+        AND conname = $2;
+    `,
+    [tableName, constraintName]
+  );
+
+  const hasBadSellerReference = rows.some((row) => {
+    const definition = String(row.definition || "").toLowerCase();
+    return definition.includes(`foreign key (${columnName})`) && definition.includes("references users(id)");
+  });
+
+  if (hasBadSellerReference) {
+    console.log(`[DB] Repairing ${tableName}: dropping stale ${columnName} FK that still points to users(id).`);
+    await client.query(`ALTER TABLE ${tableName} DROP CONSTRAINT IF EXISTS ${constraintName};`);
+    await client.query(
+      `ALTER TABLE ${tableName} ADD CONSTRAINT ${constraintName} FOREIGN KEY (${columnName}) REFERENCES sellers(id) ON DELETE CASCADE;`
+    );
+  }
+}
+
 async function createFinanceAndOpsTables(client) {
   await ensureSetUpdatedAtFunction(client);
+
+  if (!(await doesTableExist(client, "escrows"))) {
+    await createEscrowsTable(client);
+  } else {
+    await repairEscrowsTable(client);
+  }
+
+  await repairSellerForeignKeyTable(client, "finance_accounts", "finance_accounts_user_id_fkey", "user_id");
+  await repairSellerForeignKeyTable(client, "wallet_ledger", "wallet_ledger_seller_id_fkey", "seller_id");
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS tenant_meta (
@@ -1480,7 +1580,7 @@ async function createFinanceAndOpsTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS finance_accounts (
       finance_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL UNIQUE REFERENCES sellers(id) ON DELETE CASCADE,
       user_role VARCHAR(30) NOT NULL,
       wallet_balance NUMERIC(15,2) DEFAULT 0 CHECK (wallet_balance >= 0),
       commission_balance NUMERIC(15,2) DEFAULT 0 CHECK (commission_balance >= 0),
@@ -1500,7 +1600,7 @@ async function createFinanceAndOpsTables(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS wallet_ledger (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      seller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      seller_id UUID NOT NULL REFERENCES sellers(id) ON DELETE CASCADE,
       entry_type VARCHAR(50) NOT NULL,
       direction VARCHAR(10) NOT NULL CHECK (direction IN ('CREDIT', 'DEBIT')),
       amount NUMERIC(15,2) NOT NULL CHECK (amount >= 0),
@@ -1711,25 +1811,6 @@ ALTER TABLE transactions
 ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0);
 `);
  
-
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS escrows (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      transaction_id UUID NOT NULL UNIQUE REFERENCES transactions(id) ON DELETE CASCADE,
-      property_id UUID REFERENCES property(property_id) ON DELETE SET NULL,
-      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
-      agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      status escrow_status NOT NULL DEFAULT 'PENDING',
-      released_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-
-  
-
-  await ensureTableColumns(client, "escrows", ESCROWS_TABLE_COLUMNS);
 
   await client.query(`
     CREATE INDEX IF NOT EXISTS idx_transfers_reference ON transfers(reference);
