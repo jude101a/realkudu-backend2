@@ -1562,8 +1562,63 @@ async function repairSellerForeignKeyTable(client, tableName, constraintName, co
   }
 }
 
+async function createTransactionsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      reference VARCHAR(100) NOT NULL UNIQUE,
+      payment_type payment_type NOT NULL,
+      property_id UUID REFERENCES property(property_id) ON DELETE SET NULL,
+      purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0),
+      buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
+      agent_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      cover_image_url TEXT,
+      title VARCHAR(255),
+      amount NUMERIC(15, 2) NOT NULL,
+      platform_fee NUMERIC(15, 2) NOT NULL DEFAULT 0,
+      seller_payout_amount NUMERIC(15, 2),
+      currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+      gateway VARCHAR(30) NOT NULL DEFAULT 'PAYSTACK',
+      gateway_reference VARCHAR(100),
+      authorization_url TEXT,
+      access_code TEXT,
+      status transaction_status NOT NULL DEFAULT 'PENDING',
+      purchase_step VARCHAR(50) NOT NULL DEFAULT 'initiated',
+      escrow_status VARCHAR(30) DEFAULT 'not_applicable',
+      payment_channel VARCHAR(30),
+      gateway_response JSONB NOT NULL DEFAULT '{}',
+      failure_reason TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      metadata JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ,
+      released_at TIMESTAMPTZ
+    );
+  `);
+
+  await ensureTableColumns(client, "transactions", TRANSACTIONS_TABLE_COLUMNS);
+
+  await client.query(`
+    ALTER TABLE transactions DROP COLUMN IF EXISTS user_id;
+    ALTER TABLE transactions DROP COLUMN IF EXISTS type;
+    ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_seller_id_fkey;
+    ALTER TABLE transactions
+      ADD CONSTRAINT transactions_seller_id_fkey
+      FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE SET NULL;
+  `);
+
+  await client.query(`
+    ALTER TABLE transactions
+      ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0);
+  `);
+}
+
 async function createFinanceAndOpsTables(client) {
   await ensureSetUpdatedAtFunction(client);
+
+  await createTransactionsTable(client);
 
   if (!(await doesTableExist(client, "escrows"))) {
     await createEscrowsTable(client);
@@ -1738,108 +1793,6 @@ DROP CONSTRAINT IF EXISTS property_orders_seller_id_fkey`);
     );
   `);
   await ensureTableColumns(client, "transfers", TRANSFERS_TABLE_COLUMNS);
-
-  await client.query(`DROP TABLE IF EXISTS transactions CASCADE;`);
-
-  
-
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS transactions (
-
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    reference VARCHAR(100) NOT NULL UNIQUE,
-
-    -- What the buyer is paying for
-    payment_type payment_type NOT NULL,
-
-    -- Property involved
-    property_id UUID REFERENCES property(property_id)
-        ON DELETE SET NULL,
-    purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0),
-
-    -- Participants
-    buyer_id UUID REFERENCES users(id)
-        ON DELETE SET NULL,
-
-    seller_id UUID REFERENCES sellers(id)
-        ON DELETE SET NULL,
-
-    agent_id UUID REFERENCES users(id)
-        ON DELETE SET NULL,
-
-    -- Property snapshot / display information
-    cover_image_url TEXT,
-    title VARCHAR(255),
-
-    -- Money
-    amount NUMERIC(15, 2) NOT NULL,
-
-    platform_fee NUMERIC(15, 2) NOT NULL DEFAULT 0,
-
-    seller_payout_amount NUMERIC(15, 2),
-
-    currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
-
-    -- Payment gateway
-    gateway VARCHAR(30) NOT NULL DEFAULT 'PAYSTACK',
-
-    gateway_reference VARCHAR(100),
-
-    authorization_url TEXT,
-
-    access_code TEXT,
-
-    -- Transaction state
-    status transaction_status NOT NULL DEFAULT 'PENDING',
-
-    purchase_step VARCHAR(50) NOT NULL DEFAULT 'initiated',
-
-    escrow_status VARCHAR(30) DEFAULT 'not_applicable',
-
-    payment_channel VARCHAR(30),
-
-    -- Gateway information
-    gateway_response JSONB NOT NULL DEFAULT '{}',
-
-    failure_reason TEXT,
-
-    -- Retry / additional information
-    retry_count INTEGER NOT NULL DEFAULT 0,
-
-    metadata JSONB NOT NULL DEFAULT '{}',
-
-    -- Lifecycle
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    completed_at TIMESTAMPTZ,
-
-    released_at TIMESTAMPTZ
-);
-  `);
-
-
-  await ensureTableColumns(client, "transactions", TRANSACTIONS_TABLE_COLUMNS);
-  console.log("[DB] Dropping NOT NULL on transactions.user_id...");
-await client.query(`
-    ALTER TABLE transactions DROP COLUMN IF EXISTS user_id;
-    ALTER TABLE transactions DROP COLUMN IF EXISTS type;
-    ALTER TABLE transactions
-DROP CONSTRAINT transactions_seller_id_fkey;
-
-ALTER TABLE transactions
-ADD CONSTRAINT transactions_seller_id_fkey
-FOREIGN KEY (seller_id)
-REFERENCES sellers(id)
-ON DELETE SET NULL;
-`);
-await client.query(`
-ALTER TABLE transactions
-ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0);
-`);
- 
 
   await client.query(`
     CREATE INDEX IF NOT EXISTS idx_transfers_reference ON transfers(reference);
