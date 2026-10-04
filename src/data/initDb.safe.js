@@ -1237,6 +1237,35 @@ CREATE INDEX IF NOT EXISTS idx_activities_transaction_id ON property_purchase_ac
 `);
   }
 async function ensurePropertyTableHotfix(client) {
+  if (!(await doesTableExist(client, "tenant_meta"))) {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_meta (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        property_id UUID NOT NULL,
+        property_type VARCHAR(50),
+        rent_amount NUMERIC(12,2) NOT NULL CHECK (rent_amount >= 0),
+        rent_currency VARCHAR(10) DEFAULT 'NGN',
+        rent_frequency VARCHAR(20) NOT NULL,
+        tenancy_start_date DATE DEFAULT NOW(),
+        tenancy_end_date DATE,
+        is_active_tenant BOOLEAN DEFAULT TRUE,
+        has_paid_current_rent BOOLEAN DEFAULT FALSE,
+        notice_served BOOLEAN DEFAULT FALSE,
+        last_payment_date DATE,
+        next_due_date DATE,
+        outstanding_balance NUMERIC(12,2) DEFAULT 0.00 CHECK (outstanding_balance >= 0),
+        tenancy_status VARCHAR(30) NOT NULL,
+        property_subtype TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ,
+        CONSTRAINT chk_tenant_property_type CHECK (property_type IN ('apartment','house','land')),
+        CONSTRAINT chk_tenant_rent_frequency CHECK (rent_frequency IN ('monthly','quarterly','yearly'))
+      );
+    `);
+  }
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS property (
       property_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

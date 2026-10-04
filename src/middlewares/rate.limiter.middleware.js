@@ -1,5 +1,5 @@
 // backend/middleware/rateLimiter.js
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import Redis from 'ioredis';
 
@@ -8,7 +8,26 @@ import Redis from 'ioredis';
 // DNS errors or connection failures from crashing the app during tests
 // or in environments without Redis.
 let redis = null;
-let redisStore = null;
+
+const createRedisRateLimitStore = (prefix) => {
+  if (process.env.DISABLE_REDIS === 'true' || !process.env.REDIS_URL || !redis) {
+    return undefined;
+  }
+
+  return new RedisStore({
+    prefix,
+    sendCommand: (...args) => redis.call(...args),
+  });
+};
+
+const getRateLimitKey = (req, prefix) => {
+  if (req.user?.id) {
+    return `${prefix}:user:${req.user.id}`;
+  }
+
+  const ip = req.ip ?? 'unknown';
+  return `${prefix}:ip:${ipKeyGenerator(ip)}`;
+};
 
 try {
   if (process.env.DISABLE_REDIS !== 'true' && process.env.REDIS_URL) {
@@ -21,20 +40,12 @@ try {
         return Math.min(times * 100, 2000);
       },
     });
-
-    // Create RedisStore but do not force an immediate connection. If Redis
-    // is unavailable, rate-limit will fall back to the in-memory store when
-    // `passOnStoreError` is enabled below.
-    redisStore = new RedisStore({
-      sendCommand: (...args) => redis.call(...args),
-    });
   } else {
     console.warn('⚠️ Redis disabled for rate limiter (DISABLE_REDIS or missing REDIS_URL)');
   }
 } catch (err) {
   console.warn('⚠️ Failed to initialize Redis for rate limiter:', err?.message || err);
   redis = null;
-  redisStore = null;
 }
 
 export const dashboardReadLimiter = rateLimit({
@@ -42,13 +53,9 @@ export const dashboardReadLimiter = rateLimit({
   limit: 120,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  store: redisStore || undefined,
+  store: createRedisRateLimitStore('rl:dashboard'),
   passOnStoreError: true,
-  keyGenerator: (req) => {
-    // Authentication is already enforced. Rate-limit by authenticated user,
-    // not only IP, so NAT/shared networks cannot bypass seller limits.
-    return `estate-dashboard:${req.user?.id ?? req.ip}`;
-  },
+  keyGenerator: (req) => getRateLimitKey(req, 'estate-dashboard'),
   message: {
     success: false,
     message: 'Too many dashboard requests. Please try again shortly.',
@@ -60,11 +67,9 @@ export const transactionWriteLimiter = rateLimit({
   limit: 30,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  store: redisStore || undefined,
+  store: createRedisRateLimitStore('rl:transaction-write'),
   passOnStoreError: true,
-  keyGenerator: (req) => {
-    return `estate-transaction-write:${req.user?.id ?? req.ip}`;
-  },
+  keyGenerator: (req) => getRateLimitKey(req, 'estate-transaction-write'),
   message: {
     success: false,
     message: 'Too many transaction update requests.',

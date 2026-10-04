@@ -1,3 +1,4 @@
+import "./config/instrument.js";
 import express from "express";
 import cors from "cors";
 import * as Sentry from "@sentry/node";
