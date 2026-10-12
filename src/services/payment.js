@@ -11,6 +11,7 @@ import { generateReference } from "../utils/reference.js";
 import logger from "../config/logger.js";
 import { sendNotification } from "../services/notification.service.js";
 import EscrowService from "./escrow.service.js";
+import TenantModel from "../models/tenant.model.js";
 
 const info = logger.info.bind(logger);
 const _findById = findUserById;
@@ -28,13 +29,30 @@ class PaymentService {
     async calculateAmount(propertyId, paymentType) {
 
         const property = await PropertyModel.findById(propertyId);
+const toNum = (v) => Number(v?? 0) || 0;
+const tenantMeta = await TenantModel.getTenantMetaByProperty(propertyId);
+const isTenant = property?.tenant_id == tenantMeta?.tenant_id ?? false;
+
+const price =
+  toNum(property.price?? property.asking_price?? property.askingPrice) +
+  toNum(property.booking_fee) +
+  toNum(property.statutory_fee) +
+  toNum(property.development_fee) +
+  toNum(property.survey_fee) +
+  toNum(property.legal_fee) +
+  toNum(property.documentation_fee) +
+  toNum(property.agency_fee) +
+  toNum(property.other_fees) +
+  toNum(property.caution_fee);
+
+  const bookingFee =
+  toNum(property.booking_fee) +
+1000;
 
         if (!property)
             throw new Error("Property not found.");
 
-        const bookingFee = Number((property.booking_fee ?? property.bookingFee ?? 0) + 1000);
-        const price = Number(property.price ?? property.asking_price ?? property.askingPrice ?? 0);
-        const rentPrice = Number(property.rent_price ?? property.rentPrice ?? 0);
+        const rentPrice = Number(property.price);
         console.log("✅ Payment calculateAmount service reached", { propertyId, paymentType, bookingFee, price, rentPrice, property });
 
         switch (paymentType) {
@@ -108,7 +126,7 @@ class PaymentService {
 
                 return {
 
-                    amount: rentPrice,
+                    amount: isTenant ? rentPrice : price,
 
                     property
 
@@ -116,7 +134,7 @@ class PaymentService {
             case "rent":
                 return {
 
-                    amount: rentPrice,
+                    amount: isTenant ? rentPrice : price,
 
                     property
 
@@ -891,7 +909,7 @@ if (!verification.status) {
 
                 const expectedKobo = Number(data?.requested_amount ?? data?.amount ?? 0);
                 const amountMatches = expectedKobo === Number(currentTransaction.amount ?? 0) * 100;
-
+// logs amount mismatch
                 if (!amountMatches) {
                     info({ event: "WEBHOOK_AMOUNT_MISMATCH", reference: data.reference });
                     await TransactionRepository.markFailed(data.reference, data);
@@ -951,8 +969,8 @@ if (!verification.status) {
                             await PropertyModel.update(property.id ?? property.property_id, {
                                 status: property.is_estate ? "available" : "unavailable",
                                 soldOut: property.is_estate ? false : true,
-                                soldAt: new Date(),
-                                buyerId: buyer?.id ?? buyer?._id ?? null,
+                                soldAt: property.is_estate ? null : new Date(),
+                                buyerId: property.is_estate ? null : buyer?.id ?? buyer?._id ?? null,
                             });
                         }
                     } else if (propertyType === "land") {
@@ -974,6 +992,25 @@ if (!verification.status) {
                                 soldAt: new Date(),
                                 buyerId: buyer?.id ?? buyer?._id ?? null,
                             });
+                            const tenantMeta = TenantModel.getTenantMetaByProperty(property.id ?? property.property_id);
+                            if (!tenantMeta) {
+                            
+                            await TenantModel.createTenantMeta({
+                                property_id: property.id ?? property.property_id,
+                                tenant_id: buyer?.id ?? buyer?._id ?? null,
+                                property_type: "apartment",
+                                rent_amount: Number(property.price  ?? 0),
+                                rent_currency: String( property.currency ??  "NGN").toUpperCase(),
+                                rent_frequency: String( property.payment_duration ??  "yearly").toLowerCase(),
+                                tenancy_start_date: data?.tenancyStartDate ?? data?.tenancy_start_date ?? new Date(),
+                                tenancy_end_date: data?.tenancyEndDate ?? data?.tenancy_end_date ?? null,
+                                next_due_date: new Date(new Date().setMonth(new Date().getMonth() + 12)), // next month
+                                tenancy_status: "active",
+                                is_active_tenant: true,
+                                has_paid_current_rent: true,
+                                notice_served: false,
+                            });
+                            }
                         }
                     }
 
