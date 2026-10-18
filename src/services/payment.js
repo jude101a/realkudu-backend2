@@ -27,7 +27,7 @@ class PaymentService {
      * =====================================
      */
 
-    async calculateAmount(propertyId, paymentType, isProtected = false, purchaseQuantity = 1) {
+    async calculateAmount(propertyId, paymentType, isProtected = false, purchaseQuantity) {
 
         const property = await PropertyModel.findById(propertyId);
 const toNum = (v) => Number(v?? 0) || 0;
@@ -186,7 +186,9 @@ const price =
 
             propertyId,
 
-            paymentType
+            paymentType,
+            isProtected,
+            purchaseQuantity
 
         );
 
