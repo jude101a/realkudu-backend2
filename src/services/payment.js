@@ -22,12 +22,12 @@ const initializeTransaction = paystack.initializeTransaction.bind(paystack);
 class PaymentService {
 
     /**
-     * =====================================
+     * ====================================
      * SERVER SIDE PRICE CALCULATION
      * =====================================
      */
 
-    async calculateAmount(propertyId, paymentType, isProtected = false) {
+    async calculateAmount(propertyId, paymentType, isProtected = false, purchaseQuantity = 1) {
 
         const property = await PropertyModel.findById(propertyId);
 const toNum = (v) => Number(v?? 0) || 0;
@@ -35,14 +35,14 @@ const tenantMeta = await TenantModel.getTenantMetaByProperty(propertyId);
 const isTenant = property?.tenant_id == tenantMeta?.tenant_id ?? false;
 
 const price =
-  toNum(property.price?? property.asking_price?? property.askingPrice) +
-  toNum(property.booking_fee) +
-  toNum(property.statutory_fee) +
-  toNum(property.development_fee) +
-  toNum(property.survey_fee) +
-  toNum(property.legal_fee) +
-  toNum(property.documentation_fee) +
-  toNum(property.agency_fee) +
+  (toNum(property.price?? property.asking_price?? property.askingPrice) * purchaseQuantity) +
+  (toNum(property.booking_fee)) +
+  (toNum(property.statutory_fee) * purchaseQuantity) +
+  (toNum(property.development_fee) * purchaseQuantity) +
+  (toNum(property.survey_fee) * purchaseQuantity) +
+  (toNum(property.legal_fee) * purchaseQuantity) +
+  (toNum(property.documentation_fee) * purchaseQuantity) +
+  (toNum(property.agency_fee) * purchaseQuantity) +
   toNum(property.other_fees) +
   toNum(property.caution_fee);
 
@@ -102,7 +102,7 @@ const price =
 
                 return {
 
-                    amount: isProtected ? (price * 1.05) : price,
+                    amount:  price,
 
                     property
 
@@ -110,7 +110,7 @@ const price =
             case "PROPERTY_PURCHASE":
                 return {
 
-                    amount: isProtected ? (price * 1.05) : price,
+                    amount:  price,
 
                     property
 
@@ -118,7 +118,7 @@ const price =
             case "property_purchase":
                 return {
 
-                    amount: isProtected ? (price * 1.05) : price,
+                    amount:  price,
 
                     property
 
@@ -127,7 +127,7 @@ const price =
 
                 return {
 
-                    amount: isTenant ? rentPrice :isProtected ? (price * 1.1) : price,
+                    amount: isTenant ? rentPrice : price,
 
                     property
 
@@ -135,7 +135,7 @@ const price =
             case "rent":
                 return {
 
-                    amount: isTenant ? rentPrice : isProtected ? (price * 1.1) : price,
+                    amount: isTenant ? rentPrice :  price,
 
                     property
 
