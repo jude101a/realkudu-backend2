@@ -27,7 +27,7 @@ const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
     "SUBSCRIPTION",
     "INSPECTION",
   ],
-  transaction_status: [
+  _status: [
     "PENDING",
     "INITIALIZED",
     "PROCESSING",
@@ -1609,6 +1609,7 @@ async function createTransactionsTable(client) {
       FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE SET NULL;
   `);
 
+
   await client.query(`
     ALTER TABLE transactions
       ADD COLUMN IF NOT EXISTS purchase_quantity NUMERIC(12, 2) DEFAULT 0 CHECK (purchase_quantity >= 0);
@@ -1666,8 +1667,11 @@ async function createFinanceAndOpsTables(client) {
       finance_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       user_id UUID NOT NULL UNIQUE REFERENCES sellers(id) ON DELETE CASCADE,
       user_role VARCHAR(30) NOT NULL,
+
       wallet_balance NUMERIC(15,2) DEFAULT 0 CHECK (wallet_balance >= 0),
       commission_balance NUMERIC(15,2) DEFAULT 0 CHECK (commission_balance >= 0),
+      pending_balance NUMERIC(15,2) DEFAULT 0 CHECK (pending_balance >= 0),
+      available_balance NUMERIC(15,2) DEFAULT 0 CHECK (available_balance >= 0),
       total_earnings NUMERIC(15,2) DEFAULT 0 CHECK (total_earnings >= 0),
       total_withdrawn NUMERIC(15,2) DEFAULT 0 CHECK (total_withdrawn >= 0),
       total_properties_sold INTEGER DEFAULT 0 CHECK (total_properties_sold >= 0),
@@ -1681,6 +1685,12 @@ async function createFinanceAndOpsTables(client) {
     );
   `);
 
+  await client.query(
+    `
+    ALTER TABLE finance_accounts ADD COLUMN IF NOT EXISTS available_balance NUMERIC(15,2) DEFAULT 0 CHECK (available_balance >= 0)
+    ALTER TABLE finance_accounts ADD COLUMN IF NOT EXISTS available_balance NUMERIC(15,2) DEFAULT 0 CHECK (available_balance >= 0)
+    `
+  )
   await client.query(`
     CREATE TABLE IF NOT EXISTS wallet_ledger (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1688,6 +1698,7 @@ async function createFinanceAndOpsTables(client) {
       entry_type VARCHAR(50) NOT NULL,
       direction VARCHAR(10) NOT NULL CHECK (direction IN ('CREDIT', 'DEBIT')),
       amount NUMERIC(15,2) NOT NULL CHECK (amount >= 0),
+      balance_before NUMERIC(15,2) NOT NULL DEFAULT 0,
       balance_after NUMERIC(15,2) NOT NULL DEFAULT 0,
       currency VARCHAR(10) NOT NULL DEFAULT 'NGN',
       reference TEXT NOT NULL UNIQUE,
@@ -1699,8 +1710,9 @@ async function createFinanceAndOpsTables(client) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await ensureTableColumns(client, "wallet_ledger", WALLET_LEDGER_TABLE_COLUMNS);
-
+  await client.query(`
+    ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS balance_before NUMERIC(15,2) NOT NULL DEFAULT 0;
+`);
   await client.query(`
     CREATE TABLE IF NOT EXISTS reviews (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

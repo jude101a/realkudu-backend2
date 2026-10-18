@@ -12,6 +12,7 @@ import logger from "../config/logger.js";
 import { sendNotification } from "../services/notification.service.js";
 import EscrowService from "./escrow.service.js";
 import TenantModel from "../models/tenant.model.js";
+import pool from "../config/db.js";
 
 const info = logger.info.bind(logger);
 const _findById = findUserById;
@@ -26,7 +27,7 @@ class PaymentService {
      * =====================================
      */
 
-    async calculateAmount(propertyId, paymentType) {
+    async calculateAmount(propertyId, paymentType, isProtected = false) {
 
         const property = await PropertyModel.findById(propertyId);
 const toNum = (v) => Number(v?? 0) || 0;
@@ -101,7 +102,7 @@ const price =
 
                 return {
 
-                    amount: price,
+                    amount: isProtected ? (price * 1.05) : price,
 
                     property
 
@@ -109,7 +110,7 @@ const price =
             case "PROPERTY_PURCHASE":
                 return {
 
-                    amount: price,
+                    amount: isProtected ? (price * 1.05) : price,
 
                     property
 
@@ -117,7 +118,7 @@ const price =
             case "property_purchase":
                 return {
 
-                    amount: price,
+                    amount: isProtected ? (price * 1.05) : price,
 
                     property
 
@@ -126,7 +127,7 @@ const price =
 
                 return {
 
-                    amount: isTenant ? rentPrice : price,
+                    amount: isTenant ? rentPrice :isProtected ? (price * 1.1) : price,
 
                     property
 
@@ -134,7 +135,7 @@ const price =
             case "rent":
                 return {
 
-                    amount: isTenant ? rentPrice : price,
+                    amount: isTenant ? rentPrice : isProtected ? (price * 1.1) : price,
 
                     property
 
@@ -161,6 +162,8 @@ const price =
         propertyId,
 
         paymentType,
+        purchaseQuantity,
+        isProtected,
 
         callbackUrl
 
@@ -204,6 +207,7 @@ const price =
             reference,
 
             paymentType,
+            purchaseQuantity,
 
             buyerId: buyer.id ?? buyer._id,
 
@@ -863,12 +867,27 @@ if (!verification.status) {
 
         if (status === "PENDING") {
             await EscrowService.markHeld(escrow.id);
-        }
+         const sellerAccount =   await pool.query(
+                `UPDATE finance_accounts SET pending_balance = pending_balance + $1 AND wallet_balance = wallet_balance + $1 WHERE user_id = $2
+                RETURNING *`,
+                [transactionAmount, normalizedSellerId]
+                
+            );
+            const balanceBefore = Number(sellerAccount?.rows?.[0]?.available_balance ?? 0);
+            const balanceAfter = balanceBefore + Number(transactionAmount);
 
-        const releasedEscrow = await EscrowService.approveBuyer(escrow.id);
+            await pool.query(
+                `INSERT INTO wallet_ledger (seller_id, entry_type, direction, amount, balance_after, currency, reference, description,balance_before) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [normalizedSellerId, "CREDIT", "PENDING", transactionAmount, balanceAfter, paidTransaction?.currency ?? "NGN", paidTransaction?.reference ?? null, `Funds held in escrow for transaction ${paidTransaction?.reference ?? null}`, balanceBefore]
+            );
+
+
+        }
+        
+
 
         info({
-            event: "SELLER_PAYOUT_RELEASED",
+            event: "SELLER_PAYOUT_INITIATED",
             reference: paidTransaction?.reference ?? null,
             escrowId: escrow.id,
             amount: transactionAmount,
@@ -876,6 +895,8 @@ if (!verification.status) {
 
         return releasedEscrow ?? escrow;
     }
+
+
 
     async handleWebhookEvent(event) {
 

@@ -90,23 +90,24 @@ class TransactionRepository {
         accessCode        = null,
         status            = 'PENDING',
         gatewayResponse   = {},
+        purchaseQuantity     = 1,
     }) {
         const { rows } = await pool.query(
             `INSERT INTO transactions (
                 reference, payment_type, property_id, buyer_id, seller_id,
                 agent_id, amount, currency, gateway, gateway_reference,
-                authorization_url, access_code, status, gateway_response
+                authorization_url, access_code, status, gateway_response, purchase_quantity
              ) VALUES (
                 $1, $2, $3, $4, $5,
                 $6, $7, $8, $9, $10,
-                $11, $12, $13, $14
+                $11, $12, $13, $14, $15
              )
              RETURNING *`,
             [
                 reference, paymentType, propertyId, buyerId, sellerId,
                 agentId, amount, currency, gateway, gatewayReference,
                 authorizationUrl, accessCode, status,
-                JSON.stringify(gatewayResponse),
+                JSON.stringify(gatewayResponse), purchaseQuantity
             ]
         );
         return rows[0];
