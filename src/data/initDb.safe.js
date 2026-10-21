@@ -2,7 +2,7 @@ import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v19";
 // Bump checksum after schema adjustments so migration runs again when applied
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v23";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v25";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
@@ -230,6 +230,8 @@ const FINANCE_ACCOUNT_RECONCILIATION_COLUMNS = Object.freeze([
   { name: "user_id", typeSql: "UUID" },
   { name: "user_role", typeSql: "VARCHAR(30)" },
   { name: "wallet_balance", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "pending_balance", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
+  { name: "available_balance", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
   { name: "commission_balance", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
   { name: "total_earnings", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
   { name: "total_withdrawn", typeSql: "NUMERIC(15,2)", defaultSql: "0" },
@@ -340,6 +342,7 @@ const REVIEW_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
 ]);
 
 const NOTIFICATION_TABLE_RECONCILIATION_COLUMNS = Object.freeze([
+  { name: "id", typeSql: "UUID", defaultSql: "gen_random_uuid()" },
   { name: "user_id", typeSql: "UUID" },
   { name: "title", typeSql: "TEXT" },
   { name: "message", typeSql: "TEXT" },
@@ -1105,6 +1108,12 @@ async function ensureNotificationTables(client) {
     );
   `);
 
+  await ensureTableColumns(
+    client,
+    "notification",
+    NOTIFICATION_TABLE_RECONCILIATION_COLUMNS
+  );
+
   await client.query(`
     CREATE INDEX IF NOT EXISTS idx_notification_user_id ON notification(user_id);
   `);
@@ -1396,7 +1405,7 @@ const STARTUP_SCHEMA_RECONCILIATION = Object.freeze({
   users: USER_TABLE_RECONCILIATION_COLUMNS,
   sellers: SELLER_TABLE_RECONCILIATION_COLUMNS,
   lawyers: LAWYER_TABLE_RECONCILIATION_COLUMNS,
-  notifications: NOTIFICATION_TABLE_RECONCILIATION_COLUMNS,
+  notification: NOTIFICATION_TABLE_RECONCILIATION_COLUMNS,
   houses: [
     { name: "state", typeSql: "VARCHAR(100)" },
     { name: "lga", typeSql: "VARCHAR(100)" },
@@ -1687,6 +1696,7 @@ async function createFinanceAndOpsTables(client) {
 
   await client.query(`
     ALTER TABLE finance_accounts
+    ADD COLUMN IF NOT EXISTS pending_balance NUMERIC(15,2) DEFAULT 0 CHECK (pending_balance >= 0),
     ADD COLUMN IF NOT EXISTS available_balance NUMERIC(15,2) DEFAULT 0 CHECK (available_balance >= 0);
   `);
   await client.query(`
