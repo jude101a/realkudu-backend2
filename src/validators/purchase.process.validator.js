@@ -22,6 +22,13 @@ export const requestInspectionSchema = Joi.object({
   inspectionMeetingPoint: meetingPoint.required(),
 });
 
+export const scheduleInspectionSchema = Joi.object({
+  inspectionDate: dateString.required(),
+  inspectionTime: timeString.required(),
+  inspectionAdditionalNotes: notes,
+  inspectionMeetingPoint: meetingPoint.required(),
+});
+
 export const confirmInspectionSchema = Joi.object({
   buyerId: uuid.required(),
   inspectionDate: dateString,

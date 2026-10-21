@@ -13,6 +13,7 @@ import { sendNotification } from "../services/notification.service.js";
 import EscrowService from "./escrow.service.js";
 import TenantModel from "../models/tenant.model.js";
 import pool from "../config/db.js";
+import PurchaseProcessStepModel from "../models/purchase.process.model.js";
 
 const info = logger.info.bind(logger);
 const _findById = findUserById;
@@ -253,9 +254,11 @@ const price =
 
                 propertyId: property.property_id ?? property.propertyId ?? property.id,
 
-                paymentType,
+                paymentType: paymentType,
                 sellerId: property.seller_id ?? property.sellerId,
                 agentId: property.agent_id ?? property.agentId ?? property.agent,
+                purchaseQuantity: purchaseQuantity,
+                lawyerId: property.lawyer_id, 
 
 
             }
@@ -906,9 +909,21 @@ if (!verification.status) {
         const sellerId = data?.metadata?.sellerId ?? data?.sellerId ?? null;
         const buyerId = data?.metadata?.buyerId ?? data?.buyerId ?? null;
         const propertyId = data?.metadata?.propertyId ?? data?.propertyId ?? null;
+        const currentTransaction = transaction ?? (data?.reference ? await TransactionRepository.findByReference(data.reference) : null);
 
         const seller = sellerId ? this.normalizeSeller(await SellerModel.findById(sellerId)) : null;
         const buyer = buyerId ? await findUserById(buyerId) : null;
+        const agentId = data?.metadata.agentId;
+        const lawyerId = data?.metadata.lawyerId;
+        const transactionCurrency = currentTransaction.currency;
+        const paymentType = String(
+                    data?.paymentType ?? data?.metadata?.paymentType ?? paidTransaction?.payment_type ?? "PROPERTY_PURCHASE"
+                ).toUpperCase();
+                const propertyType = this.normalizePropertyType(
+                    data?.propertyType ?? property?.property_type ?? property?.propertyType ?? "unknown"
+                );
+
+        const purchaseQuantity = data?.metadata.purchaseQuantity?? 1;
         const property = propertyId ? await PropertyModel.findById(propertyId) : null;
         const transaction = data?.reference ? await TransactionRepository.findByReference(data.reference) : null;
 
@@ -918,7 +933,6 @@ if (!verification.status) {
 
             case "charge.success": {
 
-                const currentTransaction = transaction ?? (data?.reference ? await TransactionRepository.findByReference(data.reference) : null);
 
                 if (!currentTransaction) {
                     info({ event: "WEBHOOK_UNKNOWN_REFERENCE", reference: data.reference });
@@ -966,6 +980,8 @@ if (!verification.status) {
                 if (!escrow) {
                     escrow = await EscrowService.createFromTransaction(paidTransaction);
                 }
+                const { order, step } =
+      
 
                 info({
                     event: "ESCROW_CREATED_AFTER_PAYMENT",
@@ -979,22 +995,87 @@ if (!verification.status) {
                     sellerId: seller?.id ?? seller?.user_id ?? seller?.userId ?? null,
                 });
 
-                const paymentType = String(
-                    data?.paymentType ?? data?.metadata?.paymentType ?? paidTransaction?.payment_type ?? "PROPERTY_PURCHASE"
-                ).toUpperCase();
-                const propertyType = this.normalizePropertyType(
-                    data?.propertyType ?? property?.property_type ?? property?.propertyType ?? "unknown"
-                );
-
+                
                 if (paymentType === "PROPERTY_PURCHASE") {
+
+                    await OrderModel.create(
+        {
+          buyerId,
+
+          sellerId,
+
+          agentId,
+          lawyerId,
+
+          propertyId,
+
+          quantity: purchaseQuantity ,
+
+          propertyType:
+            propertyType,
+
+          status: "pending",
+
+          paymentType,
+
+          bookingFee: property.booking_fee,
+
+          agreedAmount:
+            Number(property?.price),
+
+          amountPaid:
+            Number(currentTransaction.amount),
+
+          transactionCurrency,
+
+          inspectionRequired = false,
+
+          inspectionCompleted: false,
+
+          dueDiligenceCompleted: false,
+
+          agreementSigned: false,
+
+          governmentConsentRequired = false,
+
+          notes,
+
+          purchaseStep: "Property payment",
+
+          funnelStep: "payment",
+
+          docsVerified: false,
+        },
+
+        {
+          propertyId,
+
+          quantity: Number(data?.metadata.purchaseQuantity),
+
+          bookingFee: Number(property.booking_fee),
+
+          agreedAmount:
+            Number(currentTransaction.amount),
+
+          buyerId,
+
+          sellerId,
+        }
+      );
+
                     if (propertyType === "house") {
                         if (property) {
+                            
                             await PropertyModel.update(property.id ?? property.property_id, {
                                 status: property.is_estate ? "available" : "unavailable",
                                 soldOut: property.is_estate ? false : true,
                                 soldAt: property.is_estate ? null : new Date(),
                                 buyerId: property.is_estate ? null : buyer?.id ?? buyer?._id ?? null,
                             });
+
+                            await PurchaseProcessStepModel.create(
+
+                            )
                         }
                     } else if (propertyType === "land") {
                         if (property) {
@@ -1044,6 +1125,72 @@ if (!verification.status) {
                         paidTransaction,
                         data,
                     });
+                }
+                if (paymentType === "BOOKING"){
+                const order =    await OrderModel.create(
+        {
+          buyerId,
+
+          sellerId,
+
+          agentId,
+          lawyerId,
+
+          propertyId,
+
+          quantity: purchaseQuantity ,
+
+          propertyType:
+            propertyType,
+
+          status: "pending",
+
+          paymentType,
+
+          bookingFee: property.booking_fee,
+
+          agreedAmount:
+            Number(property?.price),
+
+          amountPaid:
+            null,
+
+          transactionCurrency,
+
+          inspectionRequired = true,
+
+          inspectionCompleted: false,
+
+          dueDiligenceCompleted: false,
+
+          agreementSigned: false,
+
+          governmentConsentRequired = false,
+
+          notes,
+
+          purchaseStep: "Property booking",
+
+          funnelStep: "booked",
+
+          docsVerified: false,
+        },
+
+        {
+          propertyId,
+
+          quantity: Number(data?.metadata.purchaseQuantity),
+
+          bookingFee: Number(property.booking_fee),
+
+          agreedAmount:
+            Number(property.price),
+
+          buyerId,
+
+          sellerId,
+        }
+      );
                 }
 
                 await this.notifyStakeholders({

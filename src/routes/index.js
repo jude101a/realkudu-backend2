@@ -18,6 +18,7 @@ import tenantRoutes from "./tenant.routes.js";
 import apartmentRoutes from "./apartment.routes.js";
 import transactionRoutes from "./transactions.routes.js";
 import landEstateTransactionsRoutes from "./estate.land.routes.js"; // Assuming you have a separate route for estate transactions
+import orderRoutes from "./order.routes.js";
 
 // MVP scope intentionally excludes land-property, apartment, and house-for-sale modules.
 
@@ -41,6 +42,7 @@ router.use("/transfers", transferRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/tenants", tenantRoutes);
 router.use("/transactions", transactionRoutes); // Assuming transferRoutes handles transactions as well
+router.use("/orders", orderRoutes);
 router.use("/land", landEstateTransactionsRoutes); // Assuming you have a separate route for estate transactions
 router.use(
 

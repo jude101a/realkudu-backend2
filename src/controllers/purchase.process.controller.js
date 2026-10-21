@@ -1,5 +1,7 @@
 import PurchaseProcessModel from "../models/purchase.process.model.js";
 import PropertyModel from "../models/property.model.js";
+import { sendNotification } from "../services/notification.service.js";
+import PurchasePaymentProcessModel from "../models/payment.model.js";
 
 const ok = (res, data, message = "Success", meta = undefined, status = 200) =>
   res.status(status).json({
@@ -27,26 +29,72 @@ const wrap = (handler) => async (req, res) => {
       stack: error?.stack,
     });
 
-    return fail(res, 500, "Internal server error", "INTERNAL_ERROR");
+    return fail(res, error?.status || 500, error?.status ? error.message : "Internal server error", error?.status === 403 ? "FORBIDDEN" : error?.status === 404 ? "NOT_FOUND" : "INTERNAL_ERROR");
   }
 };
 
 const todayDate = () => new Date().toISOString().slice(0, 10);
 const getBuyerIdFromBody = (req) => req.body?.buyerId;
-const getBuyerIdFromQuery = (req) => req.query?.buyerId;
+const getAuthenticatedUserId = (req) => req.user?.id || req.user?.user_id || req.user?.seller_id;
 
-export const getPurchaseProcessByPropertyId = wrap(async (req, res) => {
-  const process = await PurchaseProcessModel.findByPropertyId(
-    req.params.propertyId,
-    getBuyerIdFromQuery(req)
+const notifyOrderParties = async (order, orderId, title, body, step) =>
+  Promise.all([order.buyer_id, order.seller_id].filter(Boolean).map((userId) =>
+    sendNotification({ userId, title, body, data: { orderId, step } })
+  ));
+
+export const requestAllocation = wrap(async (req, res) => {
+  const result = await PurchaseProcessModel.requestAllocation(
+    req.params.orderId,
+    getAuthenticatedUserId(req),
+    req.body || {}
   );
-
-  if (!process) {
-    return fail(res, 404, "Purchase process not found for this property", "NOT_FOUND");
-  }
-
-  return ok(res, process, "Purchase process retrieved successfully");
+  await notifyOrderParties(
+    result.order,
+    req.params.orderId,
+    "Property allocation requested",
+    "The buyer has requested allocation of the property. Awaiting seller confirmation.",
+    result.currentStep.step
+  );
+  return ok(res, result, "Property allocation requested successfully", undefined, 201);
 });
+
+export const confirmAllocation = wrap(async (req, res) => {
+  const result = await PurchaseProcessModel.confirmAllocation(
+    req.params.orderId,
+    getAuthenticatedUserId(req),
+    req.body || {}
+  );
+  await notifyOrderParties(
+    result.order,
+    req.params.orderId,
+    "Property allocation confirmed",
+    "The seller has confirmed allocation of the property.",
+    result.currentStep.step
+  );
+  return ok(res, result, "Property allocation confirmed successfully");
+});
+
+export const getCurrentPurchaseStep = wrap(async (req, res) => {
+  const result = await PurchaseProcessModel.getCurrentPurchaseStep(req.params.orderId);
+  if (!result) return fail(res, 404, "Purchase order not found", "NOT_FOUND");
+  return ok(res, result, "Current purchase step retrieved successfully");
+});
+
+export const confirmCurrentPurchaseStep = wrap(async (req, res) => {
+  const party = String(req.body?.party || "").toLowerCase();
+  if (!["buyer", "seller"].includes(party)) {
+    return fail(res, 400, "party must be buyer or seller", "BAD_REQUEST");
+  }
+  const userId = getAuthenticatedUserId(req);
+  const result = await PurchaseProcessModel.confirmCurrentStep(req.params.orderId, party, userId);
+  if (!result) return fail(res, 404, "Purchase order not found", "NOT_FOUND");
+
+  const message = `${party === "buyer" ? "Buyer" : "Seller"} confirmed completion of ${result.currentStep.step}.`;
+  await notifyOrderParties(result.order, req.params.orderId, "Purchase step updated", message, result.currentStep.step);
+  return ok(res, result, "Purchase step confirmation saved");
+});
+
+export const getPurchaseProcessByOrderId = getCurrentPurchaseStep;
 
 export const requestInspection = wrap(async (req, res) => {
 
@@ -99,8 +147,34 @@ try {
   return ok(res, process, "Inspection requested successfully");
 });
 
+export const scheduleInspectionForAllBuyers = wrap(async (req, res) => {
+  const sellerId = req.user?.seller_id || req.user?.id || req.user?.user_id;
+  const scheduled = await PurchasePaymentProcessModel.scheduleInspectionForProperty(
+    req.params.propertyId,
+    sellerId,
+    req.body || {}
+  );
+
+  await Promise.all(scheduled.map(({ buyer_id, property_id, inspection_date, inspection_time, inspection_meeting_point }) =>
+    sendNotification({
+      userId: buyer_id,
+      channels: ["EMAIL","PUSH"],
+      jobName : "sendAccountActionEmail",
+      title: "Property inspection scheduled",
+      body: `An inspection for property ${property_id} has been scheduled for ${inspection_date} at ${inspection_time}. Meeting point: ${inspection_meeting_point}`,
+      data: { propertyId: property_id, inspectionDate: inspection_date, inspectionTime: inspection_time },
+    })
+  ));
+
+  return ok(
+    res,
+    { scheduledCount: scheduled.length, inspections: scheduled },
+    scheduled.length ? "Inspection scheduled for eligible buyers" : "No eligible buyers need an inspection"
+  );
+});
+
 export const confirmInspection = wrap(async (req, res) => {
-  const existing = await PurchaseProcessModel.findInspectionPaymentByPropertyId(
+  const existing = await PurchaseProcessModel.findByOrderId(
     req.params.propertyId,
     getBuyerIdFromBody(req)
   );

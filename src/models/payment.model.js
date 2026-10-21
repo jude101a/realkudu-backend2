@@ -112,6 +112,45 @@ const updateByPropertyAndBuyer = async (
 };
 
 class PurchaseProcessModel {
+  static async scheduleInspectionForProperty(propertyId, sellerId, schedule) {
+    const { rows } = await pool.query(
+      `INSERT INTO ${INSPECTION_PAYMENT_TABLE} (
+         property_id, buyer_id, inspection_date, inspection_time,
+         inspection_additional_notes, inspection_meeting_point, inspection_status
+       )
+       SELECT DISTINCT po.property_id, po.buyer_id, $3, $4, $5, $6, 'requested'
+       FROM property_orders po
+       LEFT JOIN ${INSPECTION_PAYMENT_TABLE} ip
+         ON ip.property_id = po.property_id AND ip.buyer_id = po.buyer_id
+       WHERE po.property_id = $1
+         AND po.seller_id = $2
+         AND po.deleted_at IS NULL
+         AND COALESCE(po.inspection_required, TRUE) = TRUE
+         AND COALESCE(po.inspection_completed, FALSE) = FALSE
+         AND po.status NOT IN ('declined', 'cancelled', 'completed')
+         AND COALESCE(ip.inspection_status, 'pending') <> 'confirmed'
+       ON CONFLICT (property_id, buyer_id)
+       DO UPDATE SET
+         inspection_date = EXCLUDED.inspection_date,
+         inspection_time = EXCLUDED.inspection_time,
+         inspection_additional_notes = EXCLUDED.inspection_additional_notes,
+         inspection_meeting_point = EXCLUDED.inspection_meeting_point,
+         inspection_status = 'requested',
+         updated_at = NOW()
+       RETURNING buyer_id, property_id, inspection_date, inspection_time,
+                 inspection_additional_notes, inspection_meeting_point, inspection_status`,
+      [
+        propertyId,
+        sellerId,
+        schedule.inspectionDate,
+        schedule.inspectionTime,
+        schedule.inspectionAdditionalNotes ?? null,
+        schedule.inspectionMeetingPoint,
+      ]
+    );
+    return rows;
+  }
+
   static async findInspectionPaymentByPropertyId(propertyId, buyerId) {
     const { rows } = await pool.query(
       `
@@ -120,6 +159,18 @@ class PurchaseProcessModel {
         WHERE property_id = $1 AND buyer_id = $2
         LIMIT 1
       `,
+      [propertyId, buyerId]
+    );
+    return rows[0] || null;
+  }
+
+  static async findOrderPartiesByPropertyAndBuyer(propertyId, buyerId) {
+    const { rows } = await pool.query(
+      `SELECT order_id, buyer_id, seller_id
+       FROM property_orders
+       WHERE property_id = $1 AND buyer_id = $2 AND deleted_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
       [propertyId, buyerId]
     );
     return rows[0] || null;

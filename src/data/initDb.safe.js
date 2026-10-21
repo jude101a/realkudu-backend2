@@ -2,7 +2,7 @@ import pool from "../config/db.js";
 
 const MIGRATION_NAME = "bootstrap_schema_v19";
 // Bump checksum after schema adjustments so migration runs again when applied
-const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v21";
+const MIGRATION_CHECKSUM = "real-kudu-bootstrap-v23";
 
 const CUSTOM_ENUM_DEFINITIONS = Object.freeze({
   PropertyType: [
@@ -1746,8 +1746,13 @@ async function createFinanceAndOpsTables(client) {
       agreed_amount NUMERIC(15,2) NOT NULL CHECK (agreed_amount >= 0),
       amount_paid NUMERIC(15,2) DEFAULT 0 CHECK (amount_paid >= 0),
       currency VARCHAR(10) DEFAULT 'NGN',
+      booking_completed BOOLEAN NOT NULL DEFAULT FALSE,
       inspection_required BOOLEAN DEFAULT TRUE,
-      inspection_completed BOOLEAN DEFAULT FALSE,
+      inspection_completed BOOLEAN NOT NULL DEFAULT FALSE,
+      payment_completed BOOLEAN NOT NULL DEFAULT FALSE,
+      allocation_completed BOOLEAN NOT NULL DEFAULT FALSE,
+      contract_signing_completed BOOLEAN NOT NULL DEFAULT FALSE,
+      completion_completed BOOLEAN NOT NULL DEFAULT FALSE,
       due_diligence_completed BOOLEAN DEFAULT FALSE,
       agreement_signed BOOLEAN DEFAULT FALSE,
       government_consent_required BOOLEAN DEFAULT TRUE,
@@ -1776,6 +1781,12 @@ DROP CONSTRAINT IF EXISTS property_orders_seller_id_fkey`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS lawyer_id UUID REFERENCES lawyers(id) ON DELETE SET NULL`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS purchase_step VARCHAR(100)`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS funnel_step VARCHAR(100)`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS booking_completed BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS inspection_completed BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS payment_completed BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS allocation_completed BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS contract_signing_completed BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS completion_completed BOOLEAN NOT NULL DEFAULT FALSE`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 0`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS quantity NUMERIC(12,2) DEFAULT 0 CHECK (quantity >= 0)`);
     await client.query(`ALTER TABLE property_orders ADD COLUMN IF NOT EXISTS docs_verified BOOLEAN DEFAULT FALSE`);

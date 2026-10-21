@@ -26,8 +26,8 @@ class PaymentController {
                 paymentType: req.body.paymentType,
 
                 callbackUrl: req.body.callbackUrl,
-                purchaseQuantity: req.purchaseQuantity,
-                buyerId = req.buyerId
+                purchaseQuantity: req.body.purchaseQuantity,
+                buyerId = req.body.buyerId
 
             });
 

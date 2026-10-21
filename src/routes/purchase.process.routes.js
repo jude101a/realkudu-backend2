@@ -1,12 +1,17 @@
 import { Router } from "express";
 import { createOrder } from "../controllers/order.controller.js";
 import {
+  confirmAllocation,
   confirmContractSigning,
   confirmDocumentUpload,
   confirmInspection,
-  getPurchaseProcessByPropertyId,
+  confirmCurrentPurchaseStep,
+  getCurrentPurchaseStep,
+  getPurchaseProcessByOrderId,
   requestContractSigning,
+  requestAllocation,
   requestInspection,
+  scheduleInspectionForAllBuyers,
   requestPayment,
 } from "../controllers/purchase.process.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
@@ -16,9 +21,9 @@ import {
   confirmDocumentUploadSchema,
   confirmInspectionSchema,
   propertyIdParamSchema,
-  purchaseProcessQuerySchema,
   requestContractSigningSchema,
   requestInspectionSchema,
+  scheduleInspectionSchema,
   requestPaymentSchema,
 } from "../validators/purchase.process.validator.js";
 
@@ -26,10 +31,16 @@ const router = Router();
 
 router.use(protect);
 
-router.get(
-  "/:propertyId",
-  validate({ params: propertyIdParamSchema, query: purchaseProcessQuerySchema }),
-  getPurchaseProcessByPropertyId
+router.get("/orders/:orderId/current-step", getCurrentPurchaseStep);
+router.patch("/orders/:orderId/current-step/confirm", confirmCurrentPurchaseStep);
+router.post("/orders/:orderId/allocation/request", requestAllocation);
+router.patch("/orders/:orderId/allocation/confirm", confirmAllocation);
+
+router.get("/orders/:orderId", getPurchaseProcessByOrderId);
+router.post(
+  "/:propertyId/inspection/schedule-all",
+  validate({ params: propertyIdParamSchema, body: scheduleInspectionSchema }),
+  scheduleInspectionForAllBuyers
 );
 router.post(
   "/:propertyId/inspection/request",
