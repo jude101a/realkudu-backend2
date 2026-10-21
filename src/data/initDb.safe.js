@@ -1685,12 +1685,10 @@ async function createFinanceAndOpsTables(client) {
     );
   `);
 
-  await client.query(
-    `
-    ALTER TABLE finance_accounts ADD COLUMN IF NOT EXISTS available_balance NUMERIC(15,2) DEFAULT 0 CHECK (available_balance >= 0)
-    ALTER TABLE finance_accounts ADD COLUMN IF NOT EXISTS available_balance NUMERIC(15,2) DEFAULT 0 CHECK (available_balance >= 0)
-    `
-  )
+  await client.query(`
+    ALTER TABLE finance_accounts
+    ADD COLUMN IF NOT EXISTS available_balance NUMERIC(15,2) DEFAULT 0 CHECK (available_balance >= 0);
+  `);
   await client.query(`
     CREATE TABLE IF NOT EXISTS wallet_ledger (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
