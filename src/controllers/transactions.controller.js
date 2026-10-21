@@ -56,7 +56,22 @@ class TransactionController {
 
   async listSellerTransactions(req, res, next) {
     try {
-      const transactions = await OrderModel.getOrders(req.params.sellerId, {
+      const transactions = await OrderModel.findBySellerId(req.params.sellerId, {
+        page: req.query.page,
+        limit: req.query.limit,
+      });
+
+      return res.json({
+        success: true,
+        data: transactions,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+  async listBuyerTransactions(req, res, next) {
+    try {
+      const transactions = await OrderModel.findByBuyerId(req.params.sellerId, {
         page: req.query.page,
         limit: req.query.limit,
       });
@@ -70,5 +85,8 @@ class TransactionController {
     }
   }
 }
+
+
+
 
 export default new TransactionController();
