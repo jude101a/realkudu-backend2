@@ -1028,7 +1028,7 @@ if (!verification.status) {
 
           transactionCurrency,
 
-          inspectionRequired = false,
+          inspectionRequired : false,
 
           inspectionCompleted: false,
 
@@ -1036,7 +1036,7 @@ if (!verification.status) {
 
           agreementSigned: false,
 
-          governmentConsentRequired = false,
+          governmentConsentRequired : false,
 
           notes,
 
@@ -1157,7 +1157,7 @@ if (!verification.status) {
 
           transactionCurrency,
 
-          inspectionRequired = true,
+          inspectionRequired : true,
 
           inspectionCompleted: false,
 
@@ -1165,7 +1165,7 @@ if (!verification.status) {
 
           agreementSigned: false,
 
-          governmentConsentRequired = false,
+          governmentConsentRequired : false,
 
           notes,
 
