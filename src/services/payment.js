@@ -13,7 +13,6 @@ import { sendNotification } from "../services/notification.service.js";
 import EscrowService from "./escrow.service.js";
 import TenantModel from "../models/tenant.model.js";
 import pool from "../config/db.js";
-import PurchaseProcessStepModel from "../models/purchase.process.model.js";
 
 const info = logger.info.bind(logger);
 const _findById = findUserById;
@@ -909,23 +908,24 @@ if (!verification.status) {
         const sellerId = data?.metadata?.sellerId ?? data?.sellerId ?? null;
         const buyerId = data?.metadata?.buyerId ?? data?.buyerId ?? null;
         const propertyId = data?.metadata?.propertyId ?? data?.propertyId ?? null;
-        const currentTransaction = transaction ?? (data?.reference ? await TransactionRepository.findByReference(data.reference) : null);
+        const transaction = data?.reference
+            ? await TransactionRepository.findByReference(data.reference)
+            : null;
+        const currentTransaction = transaction;
+        const property = propertyId ? await PropertyModel.findById(propertyId) : null;
 
         const seller = sellerId ? this.normalizeSeller(await SellerModel.findById(sellerId)) : null;
         const buyer = buyerId ? await findUserById(buyerId) : null;
-        const agentId = data?.metadata.agentId;
-        const lawyerId = data?.metadata.lawyerId;
-        const transactionCurrency = currentTransaction.currency;
+        const agentId = data?.metadata?.agentId;
+        const lawyerId = data?.metadata?.lawyerId;
+        const transactionCurrency = currentTransaction?.currency;
         const paymentType = String(
-                    data?.paymentType ?? data?.metadata?.paymentType ?? paidTransaction?.payment_type ?? "PROPERTY_PURCHASE"
-                ).toUpperCase();
-                const propertyType = this.normalizePropertyType(
-                    data?.propertyType ?? property?.property_type ?? property?.propertyType ?? "unknown"
-                );
-
-        const purchaseQuantity = data?.metadata.purchaseQuantity?? 1;
-        const property = propertyId ? await PropertyModel.findById(propertyId) : null;
-        const transaction = data?.reference ? await TransactionRepository.findByReference(data.reference) : null;
+            data?.paymentType ?? data?.metadata?.paymentType ?? currentTransaction?.payment_type ?? "PROPERTY_PURCHASE"
+        ).toUpperCase();
+        const propertyType = this.normalizePropertyType(
+            data?.propertyType ?? property?.property_type ?? property?.propertyType ?? "unknown"
+        );
+        const purchaseQuantity = data?.metadata?.purchaseQuantity ?? data?.purchaseQuantity ?? 1;
 
         info({ event: "WEBHOOK_RECEIVED", type: eventType, reference: data?.reference });
 
@@ -980,9 +980,6 @@ if (!verification.status) {
                 if (!escrow) {
                     escrow = await EscrowService.createFromTransaction(paidTransaction);
                 }
-                const { order, step } =
-      
-
                 info({
                     event: "ESCROW_CREATED_AFTER_PAYMENT",
                     reference: data.reference,
@@ -1073,9 +1070,6 @@ if (!verification.status) {
                                 buyerId: property.is_estate ? null : buyer?.id ?? buyer?._id ?? null,
                             });
 
-                            await PurchaseProcessStepModel.create(
-
-                            )
                         }
                     } else if (propertyType === "land") {
                         if (property) {
@@ -1173,6 +1167,8 @@ if (!verification.status) {
 
           funnelStep: "booked",
 
+          bookingCompleted: true,
+
           docsVerified: false,
         },
 
@@ -1191,6 +1187,22 @@ if (!verification.status) {
           sellerId,
         }
       );
+                }
+
+                if (paymentType === "PROPERTY_PURCHASE" || paymentType === "BOOKING") {
+                    const completionColumns = paymentType === "BOOKING"
+                        ? ["booking_completed"]
+                        : ["booking_completed", "inspection_completed", "payment_completed"];
+                    const completionAssignments = completionColumns
+                        .map((column) => `${column} = TRUE`)
+                        .join(", ");
+                    await pool.query(
+                        `UPDATE property_orders
+                         SET ${completionAssignments}, updated_at = NOW(),
+                             version = COALESCE(version, 0) + 1
+                         WHERE property_id = $1 AND buyer_id = $2 AND deleted_at IS NULL`,
+                        [propertyId, buyerId]
+                    );
                 }
 
                 await this.notifyStakeholders({
