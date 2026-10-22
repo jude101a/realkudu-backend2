@@ -292,7 +292,7 @@ class PaymentService {
 
             await pool.query(
                 `INSERT INTO wallet_ledger (seller_id, entry_type, direction, amount, balance_after, currency, reference, description, balance_before) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                [normalizedSellerId, "CREDIT", "PENDING", transactionAmount, balanceAfter, paidTransaction?.currency ?? "NGN", paidTransaction?.reference ?? null, `Funds held in escrow for transaction ${paidTransaction?.reference ?? null}`, balanceBefore]
+                [normalizedSellerId, "CREDIT", "CREDIT", transactionAmount, balanceAfter, paidTransaction?.currency ?? "NGN", paidTransaction?.reference ?? null, `Funds held in escrow for transaction ${paidTransaction?.reference ?? null}`, balanceBefore]
             );
         }
 
